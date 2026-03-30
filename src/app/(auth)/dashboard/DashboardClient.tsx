@@ -291,12 +291,14 @@ function RankingChart({ data, color }: { data: { name: string; value: number }[]
 
   const sorted = [...data].sort((a, b) => b.value - a.value)
   const height = Math.max(200, sorted.length * 28)
+  const maxNameLen = Math.max(...sorted.map(d => d.name.length))
+  const yAxisWidth = Math.min(Math.max(maxNameLen * 7, 80), 200)
 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={sorted} layout="vertical" margin={{ left: 8, right: 40, top: 4, bottom: 4 }}>
         <XAxis type="number" tickFormatter={v => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
-        <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
+        <YAxis type="category" dataKey="name" width={yAxisWidth} tick={{ fontSize: 11 }} />
         <Tooltip formatter={(v: any) => [`¥${v.toLocaleString()}`, "金額"]} />
         <Bar dataKey="value" radius={[0, 3, 3, 0]}>
           {sorted.map((_, i) => <Cell key={i} fill={color} />)}
