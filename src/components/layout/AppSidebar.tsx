@@ -175,6 +175,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <p className="text-xs text-center text-muted-foreground">
           © 2025 DESIGN OFFICE NEXUS
         </p>
+        <p className="text-xs text-center text-muted-foreground/50">v2.0.0</p>
       </div>
     </aside>
   )
