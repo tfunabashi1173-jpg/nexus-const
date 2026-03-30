@@ -239,7 +239,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
             <CardTitle className="text-base">🥇 社員別 売上</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={staffRanking.map(s => ({ name: s.name, value: s.sales }))} color="#3b82f6" />
+            <RankingChart data={staffRanking.map((s, i) => ({ name: i === 0 ? `🥇 ${s.name}` : i === 1 ? `🥈 ${s.name}` : i === 2 ? `🥉 ${s.name}` : s.name, value: s.sales }))} color="#3b82f6" />
           </CardContent>
         </Card>
         <Card>
@@ -247,7 +247,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
             <CardTitle className="text-base">💰 社員別 利益</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={staffRanking.map(s => ({ name: s.name, value: s.profit }))} color="#22c55e" />
+            <RankingChart data={[...staffRanking].sort((a, b) => b.profit - a.profit).map((s, i) => ({ name: i === 0 ? `🥇 ${s.name}` : i === 1 ? `🥈 ${s.name}` : i === 2 ? `🥉 ${s.name}` : s.name, value: s.profit }))} color="#22c55e" />
           </CardContent>
         </Card>
       </div>
