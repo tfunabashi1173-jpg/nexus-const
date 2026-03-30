@@ -293,16 +293,21 @@ function RankingChart({ data, color }: { data: { name: string; value: number }[]
   const height = Math.max(200, sorted.length * 28)
   const maxNameLen = Math.max(...sorted.map(d => d.name.length))
   const yAxisWidth = Math.min(Math.max(maxNameLen * 12, 100), 240)
+  const gradId = `grad-${color.replace('#', '')}`
 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={sorted} layout="vertical" margin={{ left: 0, right: 40, top: 4, bottom: 4 }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={color} stopOpacity={0.6} />
+            <stop offset="100%" stopColor={color} stopOpacity={1} />
+          </linearGradient>
+        </defs>
         <XAxis type="number" tickFormatter={v => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
         <YAxis type="category" dataKey="name" width={yAxisWidth} tick={{ fontSize: 11 }} tickLine={false} />
         <Tooltip formatter={(v: any) => [`¥${v.toLocaleString()}`, "金額"]} />
-        <Bar dataKey="value" radius={[0, 3, 3, 0]}>
-          {sorted.map((_, i) => <Cell key={i} fill={color} />)}
-        </Bar>
+        <Bar dataKey="value" fill={`url(#${gradId})`} radius={[0, 3, 3, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )
