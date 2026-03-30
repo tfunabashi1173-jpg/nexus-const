@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Project, Sale, Cost, Addon, Partner } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatYen, formatYenFull } from '@/lib/utils/date'
+import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -114,7 +115,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
       if (cid) map[cid] = (map[cid] ?? 0) + s.amount
     })
     return Object.entries(map)
-      .map(([id, amount]) => ({ name: partnerMap[id] ?? id, amount }))
+      .map(([id, amount]) => ({ name: normalizeCompanyName(partnerMap[id] ?? id), amount }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 20)
   }, [salesFY, projects, partnerMap])
@@ -123,7 +124,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
   const vendorRanking = useMemo(() => {
     const map: Record<string, number> = {}
     costsFY.forEach(c => {
-      const name = partnerMap[c.vendor_id] ?? '(不明)'
+      const name = normalizeCompanyName(partnerMap[c.vendor_id] ?? '(不明)')
       map[name] = (map[name] ?? 0) + c.amount
     })
     return Object.entries(map)
