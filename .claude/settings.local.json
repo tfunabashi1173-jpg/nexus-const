@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/t.funabashi/Documents -maxdepth 2 -type d -name *app* -o -name *streamlit*)",
+      "Bash(find /Users/t.funabashi/Documents/app -name *.py)",
+      "Bash(npm --version)",
+      "Bash(npx:*)"
+    ]
+  }
+}
