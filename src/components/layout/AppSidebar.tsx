@@ -77,7 +77,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
   }
 
   return (
-    <aside className="w-56 min-h-screen bg-background border-r flex flex-col">
+    <aside className="fixed top-0 left-0 w-56 h-screen bg-background border-r flex flex-col z-40 overflow-hidden">
       {/* ヘッダー */}
       <div className="p-4 border-b">
         <h1 className="font-bold text-sm text-foreground leading-tight">

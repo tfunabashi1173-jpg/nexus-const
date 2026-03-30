@@ -13,7 +13,7 @@ export default async function AuthLayout({
   return (
     <div className="flex min-h-screen">
       <AppSidebar user={user} />
-      <main className="flex-1 overflow-auto bg-muted/30">
+      <main className="flex-1 ml-56 overflow-auto bg-muted/30">
         <div className="p-6 max-w-7xl mx-auto">
           {children}
         </div>
