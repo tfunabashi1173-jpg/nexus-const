@@ -23,7 +23,7 @@ export interface Project {
 export interface Partner {
   partner_id: string
   name: string
-  category: '得意先' | '協力会社' | '仕入先' | '経費'
+  category: '得意先' | '協力業者' | '仕入先' | '経費'
   safety_fee_rate: number | null
   closing_day: number | null
   payment_cycle: number | null

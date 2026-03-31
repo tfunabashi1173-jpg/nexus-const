@@ -14,7 +14,13 @@ export default async function CostsPage() {
     fetchProjects(),
   ])
 
-  const vendors = partners.filter(p => ['協力会社', '仕入先'].includes(p.category))
+  const VENDOR_CATEGORY_ORDER = ['協力業者', '仕入先', '経費']
+  const vendors = partners
+    .filter(p => VENDOR_CATEGORY_ORDER.includes(p.category))
+    .sort((a, b) => {
+      const ci = VENDOR_CATEGORY_ORDER.indexOf(a.category) - VENDOR_CATEGORY_ORDER.indexOf(b.category)
+      return ci !== 0 ? ci : a.name.localeCompare(b.name, 'ja')
+    })
 
   return <CostsClient costs={costs} vendors={vendors} projects={projects} />
 }
