@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { Cost, Partner, Project } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
 import { AmountInput } from '@/components/ui/amount-input'
-import { findSimilarMatch } from '@/lib/utils/text'
+import { findSimilarMatch, normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -196,7 +196,7 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                   <Select value={manualVendorId} onValueChange={(v) => setManualVendorId(v ?? "")}>
                     <SelectTrigger><SelectValue placeholder="業者を選択" /></SelectTrigger>
                     <SelectContent>
-                      {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{v.name}</SelectItem>)}
+                      {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -286,7 +286,7 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                       <Select value={ocrVendorId} onValueChange={(v) => setOcrVendorId(v ?? "")}>
                         <SelectTrigger><SelectValue placeholder="業者を選択" /></SelectTrigger>
                         <SelectContent>
-                          {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{v.name}</SelectItem>)}
+                          {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>

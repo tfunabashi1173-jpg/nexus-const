@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { fetchCosts, fetchPartners, fetchProjects } from '@/lib/db'
+import { normalizeCompanyName } from '@/lib/utils/text'
 import { CostsClient } from './CostsClient'
 
 export const metadata: Metadata = {
@@ -19,7 +20,7 @@ export default async function CostsPage() {
     .filter(p => VENDOR_CATEGORY_ORDER.includes(p.category))
     .sort((a, b) => {
       const ci = VENDOR_CATEGORY_ORDER.indexOf(a.category) - VENDOR_CATEGORY_ORDER.indexOf(b.category)
-      return ci !== 0 ? ci : a.name.localeCompare(b.name, 'ja')
+      return ci !== 0 ? ci : normalizeCompanyName(a.name).localeCompare(normalizeCompanyName(b.name), 'ja')
     })
 
   return <CostsClient costs={costs} vendors={vendors} projects={projects} />
