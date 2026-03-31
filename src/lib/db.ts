@@ -9,7 +9,7 @@ const ACTIVE = 'is_deleted.is.null,is_deleted.eq.false'
 // ==========================================
 // Projects
 // ==========================================
-export async function fetchProjects(): Promise<Project[]> {
+async function fetchProjectsImpl(): Promise<Project[]> {
   const end = perfStart('fetchProjects')
   const { data } = await supabase()
     .from('projects')
@@ -23,6 +23,11 @@ export async function fetchProjects(): Promise<Project[]> {
     manager_name: p.users?.username ?? p.manager_id,
   }))
 }
+
+export const fetchProjects = unstable_cache(fetchProjectsImpl, ['projects'], {
+  tags: ['projects'],
+  revalidate: 30,
+})
 
 export async function fetchProject(id: string): Promise<Project | null> {
   const { data } = await supabase()
