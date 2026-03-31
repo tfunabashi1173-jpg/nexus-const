@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import { Cost, Partner, Project } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
 import { AmountInput } from '@/components/ui/amount-input'
@@ -37,12 +37,40 @@ export function CostsClient({ costs, vendors, projects }: Props) {
   const vendorMap = Object.fromEntries(vendors.map(v => [v.partner_id, v.name]))
   const projectMap = Object.fromEntries(projects.map(p => [p.project_id, `${p.project_id}: ${p.site_name}`]))
 
+  const today = new Date()
+  const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+
   // 手動入力
   const [manualVendorId, setManualVendorId] = useState('')
   const [manualProjectId, setManualProjectId] = useState('')
-  const [manualMonth, setManualMonth] = useState('')
+  const [manualMonth, setManualMonth] = useState(currentMonthStr)
   const [manualAmount, setManualAmount] = useState('')
   const [manualFile, setManualFile] = useState<File | null>(null)
+  const [manualShowAll, setManualShowAll] = useState(false)
+
+  // 請求月・前月の稼働現場、または年内全現場（その他選択時）
+  const manualProjects = useMemo(() => {
+    if (!manualMonth) return projects
+    const [yearStr, monStr] = manualMonth.split('-')
+    const year = parseInt(yearStr)
+    const mon  = parseInt(monStr)
+
+    if (manualShowAll) {
+      const yearStart = new Date(year, 0, 1)
+      const yearEnd   = new Date(year, 11, 31)
+      return projects.filter(p => {
+        if (!p.start_date || !p.end_date) return true
+        return new Date(p.start_date) <= yearEnd && new Date(p.end_date) >= yearStart
+      })
+    }
+
+    const prevMonthStart  = new Date(year, mon - 2, 1)
+    const billingMonthEnd = new Date(year, mon, 0)
+    return projects.filter(p => {
+      if (!p.start_date || !p.end_date) return false
+      return new Date(p.start_date) <= billingMonthEnd && new Date(p.end_date) >= prevMonthStart
+    })
+  }, [projects, manualMonth, manualShowAll])
 
   // OCR
   const [ocrFile, setOcrFile] = useState<File | null>(null)
@@ -202,17 +230,36 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                 </div>
                 <div className="space-y-1.5">
                   <Label>現場</Label>
-                  <Select value={manualProjectId} onValueChange={(v) => setManualProjectId(v ?? "")}>
+                  <Select
+                    value={manualProjectId}
+                    onValueChange={(v) => {
+                      if (v === '__expand__') { setManualShowAll(true) }
+                      else { setManualProjectId(v ?? '') }
+                    }}
+                  >
                     <SelectTrigger><SelectValue placeholder="現場を選択（任意）" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">（現場不明）</SelectItem>
-                      {projects.map(p => <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>)}
+                      {manualProjects.map(p => (
+                        <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>
+                      ))}
+                      {!manualShowAll && (
+                        <SelectItem value="__expand__">その他...</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label>請求月 <span className="text-destructive">*</span></Label>
-                  <Input type="month" value={manualMonth} onChange={e => setManualMonth(e.target.value)} />
+                  <Input
+                    type="month"
+                    value={manualMonth}
+                    onChange={e => {
+                      setManualMonth(e.target.value)
+                      setManualShowAll(false)
+                      setManualProjectId('')
+                    }}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>金額（税抜）<span className="text-destructive">*</span></Label>
