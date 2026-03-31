@@ -200,7 +200,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
               {costs.length === 0 ? (
                 <p className="text-sm text-muted-foreground">原価データがありません</p>
               ) : (
-                <CostPivotTable costs={costs} partnerMap={partnerMap} />
+                <CostPivotTable costs={costs} partnerMap={partnerMap} projectId={project.project_id} />
               )}
             </CardContent>
           </Card>
@@ -388,14 +388,20 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
 
 const fmtAmt = (v: number) => Math.round(v).toLocaleString()
 
-function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Record<string, string> }) {
+function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partnerMap: Record<string, string>; projectId: string }) {
   const router = useRouter()
   const [dialog, setDialog] = useState<{ vendor_id: string; month: string } | null>(null)
   const [editAmounts, setEditAmounts] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<Record<string, boolean>>({})
+  const [newAmount, setNewAmount] = useState('')
+  const [creating, setCreating] = useState(false)
 
-  // 月一覧（昇順）
-  const months = [...new Set(costs.map(c => c.billing_month?.slice(0, 7) ?? ''))].filter(Boolean).sort()
+  // 月一覧（昇順）＋ユーザーが追加した月
+  const dbMonths = [...new Set(costs.map(c => c.billing_month?.slice(0, 7) ?? ''))].filter(Boolean)
+  const [extraMonths, setExtraMonths] = useState<string[]>([])
+  const [addingMonth, setAddingMonth] = useState(false)
+  const [monthInput, setMonthInput] = useState('')
+  const months = [...new Set([...dbMonths, ...extraMonths])].sort()
 
   // 業者一覧（合計降順）
   const vendorTotals: Record<string, number> = {}
@@ -444,6 +450,39 @@ function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Reco
     else toast.error('削除に失敗しました')
   }
 
+  async function createRecord() {
+    if (!dialog || !newAmount) return
+    const amt = parseInt(newAmount.replace(/,/g, ''))
+    if (isNaN(amt) || amt <= 0) { toast.error('金額を入力してください'); return }
+    setCreating(true)
+    const res = await fetch('/api/costs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: projectId,
+        vendor_id: dialog.vendor_id,
+        billing_month: dialog.month + '-01',
+        amount: amt,
+      }),
+    })
+    setCreating(false)
+    if (res.ok) {
+      toast.success('登録しました')
+      setNewAmount('')
+      setExtraMonths(prev => prev.filter(m => m !== dialog.month))
+      router.refresh()
+      setDialog(null)
+    } else toast.error('登録に失敗しました')
+  }
+
+  function addMonthColumn() {
+    const m = monthInput
+    if (!m) return
+    if (!months.includes(m)) setExtraMonths(prev => [...prev, m])
+    setAddingMonth(false)
+    setMonthInput('')
+  }
+
   return (
     <>
       <div className="overflow-auto">
@@ -455,6 +494,28 @@ function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Reco
               {months.map(m => (
                 <th key={m} className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">{m}</th>
               ))}
+              <th className="py-2 px-2">
+                {addingMonth ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="month"
+                      className="border rounded px-1 py-0.5 text-xs"
+                      value={monthInput}
+                      onChange={e => setMonthInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') addMonthColumn(); if (e.key === 'Escape') setAddingMonth(false) }}
+                      autoFocus
+                    />
+                    <button onClick={addMonthColumn} className="text-blue-600 font-bold text-xs">✓</button>
+                    <button onClick={() => setAddingMonth(false)} className="text-muted-foreground text-xs">✕</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingMonth(true)}
+                    className="text-muted-foreground hover:text-foreground font-bold text-base leading-none"
+                    title="月を追加"
+                  >+</button>
+                )}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -464,6 +525,7 @@ function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Reco
               {months.map(m => (
                 <td key={m} className="py-2 px-3 text-right whitespace-nowrap">{fmtAmt(monthTotal(m))}</td>
               ))}
+              <td />
             </tr>
             {vendors.map(vid => {
               const name = partnerMap[vid] ?? '(不明)'
@@ -481,6 +543,7 @@ function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Reco
                         className="py-2 px-3 text-right whitespace-nowrap cursor-pointer hover:bg-blue-50 hover:text-blue-700 rounded"
                         onClick={() => {
                           setDialog({ vendor_id: vid, month: m })
+                          setNewAmount('')
                           const init: Record<string, string> = {}
                           records.forEach(c => { init[c.cost_id] = c.amount.toLocaleString() })
                           setEditAmounts(init)
@@ -490,6 +553,7 @@ function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Reco
                       </td>
                     )
                   })}
+                  <td />
                 </tr>
               )
             })}
@@ -508,41 +572,41 @@ function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Reco
             </DialogClose>
           </DialogHeader>
 
-          {dialogRecords.length === 0 ? (
-            <p className="text-sm text-muted-foreground">データなし</p>
-          ) : (
-            <div className="space-y-3">
-              {dialogRecords.map(cost => (
-                <div key={cost.cost_id} className="flex items-center gap-2 border rounded p-2">
-                  <input
-                    className="flex-1 text-right border rounded px-2 py-1 text-sm"
-                    value={editAmounts[cost.cost_id] ?? cost.amount.toLocaleString()}
-                    onChange={e => setEditAmounts(a => ({ ...a, [cost.cost_id]: e.target.value }))}
-                    onFocus={e => e.target.select()}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={saving[cost.cost_id]}
-                    onClick={() => saveRecord(cost)}
-                  >
-                    <Save className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => deleteRecord(cost)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
+          <div className="space-y-3">
+            {dialogRecords.map(cost => (
+              <div key={cost.cost_id} className="flex items-center gap-2 border rounded p-2">
+                <input
+                  className="flex-1 text-right border rounded px-2 py-1 text-sm"
+                  value={editAmounts[cost.cost_id] ?? cost.amount.toLocaleString()}
+                  onChange={e => setEditAmounts(a => ({ ...a, [cost.cost_id]: e.target.value }))}
+                  onFocus={e => e.target.select()}
+                />
+                <Button size="sm" variant="outline" disabled={saving[cost.cost_id]} onClick={() => saveRecord(cost)}>
+                  <Save className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => deleteRecord(cost)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+            {dialogRecords.length > 0 && (
               <div className="text-right text-sm font-medium pt-1 border-t">
                 合計: {fmtAmt(dialogRecords.reduce((s, c) => s + c.amount, 0))}
               </div>
+            )}
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <span className="text-xs text-muted-foreground">新規追加</span>
+              <input
+                className="flex-1 text-right border rounded px-2 py-1 text-sm"
+                placeholder="金額"
+                value={newAmount}
+                onChange={e => setNewAmount(e.target.value)}
+                onFocus={e => e.target.select()}
+                onKeyDown={e => { if (e.key === 'Enter') createRecord() }}
+              />
+              <Button size="sm" disabled={creating || !newAmount} onClick={createRecord}>登録</Button>
             </div>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
     </>
