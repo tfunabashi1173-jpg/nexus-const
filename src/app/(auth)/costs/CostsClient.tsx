@@ -76,8 +76,8 @@ export function CostsClient({ costs, vendors, projects }: Props) {
   const [ocrMonth, setOcrMonth] = useState('')
 
   function submitManual() {
-    if (!manualVendorId || !manualMonth || !manualAmount) {
-      toast.error('業者・請求月・金額を入力してください')
+    if (!manualVendorId || !manualProjectId || !manualMonth || !manualAmount) {
+      toast.error('業者・現場・請求月・金額を入力してください')
       return
     }
 
@@ -224,7 +224,7 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>現場</Label>
+                  <Label>現場 <span className="text-destructive">*</span></Label>
                   <Select
                     value={manualProjectId || '__none__'}
                     onValueChange={(v) => setManualProjectId(v === '__none__' ? '' : (v ?? ''))}
@@ -233,11 +233,10 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                       <span className={manualProjectId ? '' : 'text-muted-foreground'}>
                         {manualProjectId
                           ? (projects.find(p => p.project_id === manualProjectId)?.site_name ?? manualProjectId)
-                          : '現場を選択（任意）'}
+                          : '現場を選択'}
                       </span>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">（現場不明）</SelectItem>
                       {manualProjects.map(p => (
                         <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>
                       ))}
