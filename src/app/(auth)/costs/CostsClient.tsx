@@ -231,23 +231,34 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                 <div className="space-y-1.5">
                   <Label>現場</Label>
                   <Select
-                    value={manualProjectId}
-                    onValueChange={(v) => {
-                      if (v === '__expand__') { setManualShowAll(true) }
-                      else { setManualProjectId(v ?? '') }
-                    }}
+                    value={manualProjectId || '__none__'}
+                    onValueChange={(v) => setManualProjectId(v === '__none__' ? '' : (v ?? ''))}
                   >
                     <SelectTrigger><SelectValue placeholder="現場を選択（任意）" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">（現場不明）</SelectItem>
+                      <SelectItem value="__none__">（現場不明）</SelectItem>
                       {manualProjects.map(p => (
                         <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>
                       ))}
-                      {!manualShowAll && (
-                        <SelectItem value="__expand__">その他...</SelectItem>
-                      )}
                     </SelectContent>
                   </Select>
+                  {!manualShowAll ? (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline"
+                      onClick={() => setManualShowAll(true)}
+                    >
+                      その他の現場を表示（年度内全件）
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline"
+                      onClick={() => { setManualShowAll(false); setManualProjectId('') }}
+                    >
+                      稼働現場に絞り込む
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>請求月 <span className="text-destructive">*</span></Label>
