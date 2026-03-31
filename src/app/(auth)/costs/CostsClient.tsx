@@ -56,12 +56,7 @@ export function CostsClient({ costs, vendors, projects }: Props) {
     const mon  = parseInt(monStr)
 
     if (manualShowAll) {
-      const yearStart = new Date(year, 0, 1)
-      const yearEnd   = new Date(year, 11, 31)
-      return projects.filter(p => {
-        if (!p.start_date || !p.end_date) return true
-        return new Date(p.start_date) <= yearEnd && new Date(p.end_date) >= yearStart
-      })
+      return projects
     }
 
     const prevMonthStart  = new Date(year, mon - 2, 1)
@@ -234,7 +229,13 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                     value={manualProjectId || '__none__'}
                     onValueChange={(v) => setManualProjectId(v === '__none__' ? '' : (v ?? ''))}
                   >
-                    <SelectTrigger><SelectValue placeholder="現場を選択（任意）" /></SelectTrigger>
+                    <SelectTrigger>
+                      <span className={manualProjectId ? '' : 'text-muted-foreground'}>
+                        {manualProjectId
+                          ? (projects.find(p => p.project_id === manualProjectId)?.site_name ?? manualProjectId)
+                          : '現場を選択（任意）'}
+                      </span>
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">（現場不明）</SelectItem>
                       {manualProjects.map(p => (
@@ -248,7 +249,7 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                       className="text-xs text-muted-foreground underline"
                       onClick={() => setManualShowAll(true)}
                     >
-                      その他の現場を表示（年度内全件）
+                      その他の現場を表示（全件）
                     </button>
                   ) : (
                     <button
