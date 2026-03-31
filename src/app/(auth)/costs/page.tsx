@@ -14,7 +14,7 @@ export default async function CostsPage() {
     fetchProjects(),
   ])
 
-  const vendors = partners.filter(p => ['協力会社', '仕入先', '経費'].includes(p.category))
+  const vendors = partners.filter(p => ['協力会社', '仕入先'].includes(p.category))
 
   return <CostsClient costs={costs} vendors={vendors} projects={projects} />
 }
