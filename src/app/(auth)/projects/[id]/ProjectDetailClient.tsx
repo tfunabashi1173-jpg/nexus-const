@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Trash2, Save, ExternalLink } from 'lucide-react'
+import { Trash2, Save, ExternalLink, X } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 
 interface Props {
   project: Project
@@ -388,67 +389,163 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
 const fmtAmt = (v: number) => Math.round(v).toLocaleString()
 
 function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Record<string, string> }) {
+  const router = useRouter()
+  const [dialog, setDialog] = useState<{ vendor_id: string; month: string } | null>(null)
+  const [editAmounts, setEditAmounts] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState<Record<string, boolean>>({})
+
   // 月一覧（昇順）
   const months = [...new Set(costs.map(c => c.billing_month?.slice(0, 7) ?? ''))].filter(Boolean).sort()
 
   // 業者一覧（合計降順）
   const vendorTotals: Record<string, number> = {}
-  costs.forEach(c => {
-    vendorTotals[c.vendor_id] = (vendorTotals[c.vendor_id] ?? 0) + c.amount
-  })
+  costs.forEach(c => { vendorTotals[c.vendor_id] = (vendorTotals[c.vendor_id] ?? 0) + c.amount })
   const vendors = Object.keys(vendorTotals).sort((a, b) => vendorTotals[b] - vendorTotals[a])
 
-  // ピボット: [vendor_id][month] = amount
-  const pivot: Record<string, Record<string, number>> = {}
+  // ピボット: [vendor_id][month] = Cost[]
+  const pivot: Record<string, Record<string, Cost[]>> = {}
   costs.forEach(c => {
     const month = c.billing_month?.slice(0, 7) ?? ''
     if (!pivot[c.vendor_id]) pivot[c.vendor_id] = {}
-    pivot[c.vendor_id][month] = (pivot[c.vendor_id][month] ?? 0) + c.amount
+    if (!pivot[c.vendor_id][month]) pivot[c.vendor_id][month] = []
+    pivot[c.vendor_id][month].push(c)
   })
 
-  const monthTotal = (month: string) =>
-    vendors.reduce((s, vid) => s + (pivot[vid]?.[month] ?? 0), 0)
-
+  const cellTotal = (vid: string, m: string) =>
+    (pivot[vid]?.[m] ?? []).reduce((s, c) => s + c.amount, 0)
+  const monthTotal = (m: string) =>
+    vendors.reduce((s, vid) => s + cellTotal(vid, m), 0)
   const grandTotal = vendors.reduce((s, vid) => s + vendorTotals[vid], 0)
 
+  const dialogRecords = dialog ? (pivot[dialog.vendor_id]?.[dialog.month] ?? []) : []
+
+  async function saveRecord(cost: Cost) {
+    const newAmt = parseInt((editAmounts[cost.cost_id] ?? '').replace(/,/g, ''))
+    if (isNaN(newAmt) || newAmt === cost.amount) return
+    setSaving(s => ({ ...s, [cost.cost_id]: true }))
+    const res = await fetch('/api/costs', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: cost.cost_id, amount: newAmt }),
+    })
+    setSaving(s => ({ ...s, [cost.cost_id]: false }))
+    if (res.ok) { toast.success('更新しました'); router.refresh() }
+    else toast.error('更新に失敗しました')
+  }
+
+  async function deleteRecord(cost: Cost) {
+    if (!confirm('この原価を削除しますか？')) return
+    const res = await fetch('/api/costs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: cost.cost_id }),
+    })
+    if (res.ok) { toast.success('削除しました'); router.refresh(); setDialog(null) }
+    else toast.error('削除に失敗しました')
+  }
+
   return (
-    <div className="overflow-auto">
-      <table className="border-collapse" style={{ fontSize: '10px' }}>
-        <thead>
-          <tr className="border-b">
-            <th className="text-left py-2 pr-4 font-medium text-muted-foreground whitespace-nowrap sticky left-0 bg-background">業者</th>
-            <th className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">合計</th>
-            {months.map(m => (
-              <th key={m} className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">{m}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-b font-bold bg-muted/30">
-            <td className="py-2 pr-4 sticky left-0 bg-muted/30">合計</td>
-            <td className="py-2 px-3 text-right">{fmtAmt(grandTotal)}</td>
-            {months.map(m => (
-              <td key={m} className="py-2 px-3 text-right whitespace-nowrap">{fmtAmt(monthTotal(m))}</td>
-            ))}
-          </tr>
-          {vendors.map(vid => {
-            const name = partnerMap[vid] ?? '(不明)'
-            const shortName = normalizeCompanyName(name)
-            return (
-              <tr key={vid} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="py-2 pr-4 whitespace-nowrap sticky left-0 bg-background" title={name}>{shortName}</td>
-                <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{fmtAmt(vendorTotals[vid])}</td>
-                {months.map(m => (
-                  <td key={m} className="py-2 px-3 text-right whitespace-nowrap">
-                    {pivot[vid]?.[m] ? fmtAmt(pivot[vid][m]) : '—'}
-                  </td>
-                ))}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="overflow-auto">
+        <table className="border-collapse" style={{ fontSize: '10px' }}>
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-2 pr-4 font-medium text-muted-foreground whitespace-nowrap sticky left-0 bg-background">業者</th>
+              <th className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">合計</th>
+              {months.map(m => (
+                <th key={m} className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">{m}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b font-bold bg-muted/30">
+              <td className="py-2 pr-4 sticky left-0 bg-muted/30">合計</td>
+              <td className="py-2 px-3 text-right">{fmtAmt(grandTotal)}</td>
+              {months.map(m => (
+                <td key={m} className="py-2 px-3 text-right whitespace-nowrap">{fmtAmt(monthTotal(m))}</td>
+              ))}
+            </tr>
+            {vendors.map(vid => {
+              const name = partnerMap[vid] ?? '(不明)'
+              const shortName = normalizeCompanyName(name)
+              return (
+                <tr key={vid} className="border-b last:border-0 hover:bg-muted/30">
+                  <td className="py-2 pr-4 whitespace-nowrap sticky left-0 bg-background" title={name}>{shortName}</td>
+                  <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{fmtAmt(vendorTotals[vid])}</td>
+                  {months.map(m => {
+                    const records = pivot[vid]?.[m] ?? []
+                    const total = records.reduce((s, c) => s + c.amount, 0)
+                    return (
+                      <td
+                        key={m}
+                        className="py-2 px-3 text-right whitespace-nowrap cursor-pointer hover:bg-blue-50 hover:text-blue-700 rounded"
+                        onClick={() => {
+                          setDialog({ vendor_id: vid, month: m })
+                          const init: Record<string, string> = {}
+                          records.forEach(c => { init[c.cost_id] = c.amount.toLocaleString() })
+                          setEditAmounts(init)
+                        }}
+                      >
+                        {records.length > 0 ? fmtAmt(total) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {dialog && `${normalizeCompanyName(partnerMap[dialog.vendor_id] ?? dialog.vendor_id)} / ${dialog.month}`}
+            </DialogTitle>
+            <DialogClose className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </DialogClose>
+          </DialogHeader>
+
+          {dialogRecords.length === 0 ? (
+            <p className="text-sm text-muted-foreground">データなし</p>
+          ) : (
+            <div className="space-y-3">
+              {dialogRecords.map(cost => (
+                <div key={cost.cost_id} className="flex items-center gap-2 border rounded p-2">
+                  <input
+                    className="flex-1 text-right border rounded px-2 py-1 text-sm"
+                    value={editAmounts[cost.cost_id] ?? cost.amount.toLocaleString()}
+                    onChange={e => setEditAmounts(a => ({ ...a, [cost.cost_id]: e.target.value }))}
+                    onFocus={e => e.target.select()}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={saving[cost.cost_id]}
+                    onClick={() => saveRecord(cost)}
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => deleteRecord(cost)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              <div className="text-right text-sm font-medium pt-1 border-t">
+                合計: {fmtAmt(dialogRecords.reduce((s, c) => s + c.amount, 0))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
