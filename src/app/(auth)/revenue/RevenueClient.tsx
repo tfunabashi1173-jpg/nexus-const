@@ -1,9 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { Project, Sale, Cost, Addon, Partner } from '@/types'
-import { getFiscalYear, getFiscalYearRange, formatYenFull } from '@/lib/utils/date'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useMemo, useState, useEffect } from 'react'
+import { RevenueSummary, MonthlyRevenue } from '@/types'
+import { getFiscalYearRange, formatYenFull } from '@/lib/utils/date'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -13,124 +13,71 @@ import {
 import { Download } from 'lucide-react'
 
 interface Props {
-  projects: Project[]
-  sales: Sale[]
-  costs: Cost[]
-  addons: Addon[]
-  partners: Partner[]
+  initialSummary: RevenueSummary
+  initialMonthlyData: MonthlyRevenue
+  initialMonth: string
+  currentFY: number
   fiscalStartMonth: number
 }
 
-export function RevenueClient({ projects, sales, costs, addons, partners, fiscalStartMonth }: Props) {
+export function RevenueClient({
+  initialSummary,
+  initialMonthlyData,
+  initialMonth,
+  currentFY,
+  fiscalStartMonth,
+}: Props) {
   const today = new Date()
-  const currentFY = getFiscalYear(today, fiscalStartMonth)
   const [selectedFY, setSelectedFY] = useState(currentFY)
-  const [selectedMonth, setSelectedMonth] = useState(
-    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-  )
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth)
+  const [summary, setSummary] = useState<RevenueSummary>(initialSummary)
+  const [monthlyData, setMonthlyData] = useState<MonthlyRevenue>(initialMonthlyData)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [monthlyLoading, setMonthlyLoading] = useState(false)
 
-  const partnerMap = Object.fromEntries(partners.map(p => [p.partner_id, p.name]))
-
-  const addonMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    addons.forEach(a => { map[a.project_id] = (map[a.project_id] ?? 0) + a.amount })
-    return map
-  }, [addons])
-
-  const { start: fyStart, end: fyEnd } = getFiscalYearRange(selectedFY, fiscalStartMonth)
-
-  // 年次収支（現場別）
-  const annualData = useMemo(() => {
-    const salesByProject: Record<string, number> = {}
-    sales.forEach(s => {
-      const d = new Date(s.billing_date)
-      if (d >= fyStart && d <= fyEnd) {
-        salesByProject[s.project_id] = (salesByProject[s.project_id] ?? 0) + s.amount
-      }
-    })
-    const costsByProject: Record<string, number> = {}
-    costs.forEach(c => {
-      if (!c.project_id) return
-      const d = new Date(c.billing_month)
-      if (d >= fyStart && d <= fyEnd) {
-        costsByProject[c.project_id] = (costsByProject[c.project_id] ?? 0) + c.amount
-      }
-    })
-
-    return projects
-      .filter(p => salesByProject[p.project_id] || costsByProject[p.project_id])
-      .map(p => ({
-        project_id: p.project_id,
-        site_name: p.site_name,
-        contract: (p.contract_amount ?? 0) + (addonMap[p.project_id] ?? 0),
-        sales: salesByProject[p.project_id] ?? 0,
-        costs: costsByProject[p.project_id] ?? 0,
-        profit: (salesByProject[p.project_id] ?? 0) - (costsByProject[p.project_id] ?? 0),
-      }))
-      .sort((a, b) => b.sales - a.sales)
-  }, [projects, sales, costs, addonMap, fyStart, fyEnd])
-
-  // 月別推移（12ヶ月）
-  const monthlyData = useMemo(() => {
-    const months: string[] = []
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1)
-      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  // 年度変更 → サマリー再取得
+  useEffect(() => {
+    if (selectedFY === currentFY) {
+      setSummary(initialSummary)
+      return
     }
-    return months.map(month => {
-      const s = sales.filter(r => r.billing_date?.startsWith(month)).reduce((a, r) => a + r.amount, 0)
-      const c = costs.filter(r => r.billing_month?.startsWith(month)).reduce((a, r) => a + r.amount, 0)
-      return { month, 売上: s, 原価: c, 粗利: s - c }
-    })
-  }, [sales, costs, fyStart])
+    const { start, end } = getFiscalYearRange(selectedFY, fiscalStartMonth)
+    const s = start.toISOString().split('T')[0]
+    const e = end.toISOString().split('T')[0]
+    setSummaryLoading(true)
+    fetch(`/api/revenue-summary?fy_start=${s}&fy_end=${e}`)
+      .then(r => r.json())
+      .then(data => { setSummary(data); setSummaryLoading(false) })
+      .catch(() => setSummaryLoading(false))
+  }, [selectedFY]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 月次収支
-  const monthlyProjectData = useMemo(() => {
-    const [year, month] = selectedMonth.split('-')
-    const monthStr = `${year}-${month}`
-    const salesByProject: Record<string, number> = {}
-    sales.forEach(s => {
-      if (s.billing_date?.startsWith(monthStr)) {
-        salesByProject[s.project_id] = (salesByProject[s.project_id] ?? 0) + s.amount
-      }
-    })
-    const costsByProject: Record<string, number> = {}
-    costs.forEach(c => {
-      if (!c.project_id || !c.billing_month?.startsWith(monthStr)) return
-      costsByProject[c.project_id] = (costsByProject[c.project_id] ?? 0) + c.amount
-    })
-    const projectIds = new Set([...Object.keys(salesByProject), ...Object.keys(costsByProject)])
-    return [...projectIds].map(pid => {
-      const p = projects.find(x => x.project_id === pid)
-      return {
-        project_id: pid,
-        site_name: p?.site_name ?? '(不明)',
-        sales: salesByProject[pid] ?? 0,
-        costs: costsByProject[pid] ?? 0,
-        profit: (salesByProject[pid] ?? 0) - (costsByProject[pid] ?? 0),
-      }
-    }).sort((a, b) => b.sales - a.sales)
-  }, [sales, costs, projects, selectedMonth])
+  // 月変更 → 月次データ再取得
+  useEffect(() => {
+    if (selectedMonth === initialMonth) {
+      setMonthlyData(initialMonthlyData)
+      return
+    }
+    setMonthlyLoading(true)
+    fetch(`/api/revenue-monthly?month=${selectedMonth}`)
+      .then(r => r.json())
+      .then(data => { setMonthlyData(data); setMonthlyLoading(false) })
+      .catch(() => setMonthlyLoading(false))
+  }, [selectedMonth]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 業者別発注
-  const vendorData = useMemo(() => {
-    const map: Record<string, number> = {}
-    costs.forEach(c => {
-      const d = new Date(c.billing_month)
-      if (d >= fyStart && d <= fyEnd) {
-        const name = partnerMap[c.vendor_id] ?? '(不明)'
-        map[name] = (map[name] ?? 0) + c.amount
-      }
-    })
-    return Object.entries(map)
-      .map(([name, amount]) => ({ name, amount }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 20)
-  }, [costs, partnerMap, fyStart, fyEnd])
-
-  const totalSales = annualData.reduce((s, r) => s + r.sales, 0)
-  const totalCosts = annualData.reduce((s, r) => s + r.costs, 0)
+  const annualData = summary.annual
+  const totalSales  = annualData.reduce((s, r) => s + r.sales, 0)
+  const totalCosts  = annualData.reduce((s, r) => s + r.costs, 0)
   const totalProfit = totalSales - totalCosts
+
+  const monthlyTrendData = useMemo(() =>
+    summary.monthly_trend.map(m => ({
+      month:  m.month,
+      売上:   m.sales,
+      原価:   m.costs,
+      粗利:   m.sales - m.costs,
+    })),
+    [summary.monthly_trend]
+  )
 
   const years = [currentFY, currentFY - 1, currentFY - 2]
   const monthOptions: string[] = []
@@ -154,6 +101,15 @@ export function RevenueClient({ projects, sales, costs, addons, partners, fiscal
     a.click()
   }
 
+  const FYSelector = (
+    <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
+      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+      <SelectContent>
+        {years.map(y => <SelectItem key={y} value={String(y)}>{y}年度</SelectItem>)}
+      </SelectContent>
+    </Select>
+  )
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">💴 収支一覧・分析</h1>
@@ -171,16 +127,17 @@ export function RevenueClient({ projects, sales, costs, addons, partners, fiscal
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-3">
-                <Select value={selectedMonth} onValueChange={(v) => setSelectedMonth(v ?? "")}>
+                <Select value={selectedMonth} onValueChange={(v) => setSelectedMonth(v ?? '')}>
                   <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {monthOptions.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {monthlyLoading && <span className="text-sm text-muted-foreground animate-pulse">読み込み中...</span>}
               </div>
             </CardHeader>
             <CardContent>
-              <RevenueTable data={monthlyProjectData} />
+              <RevenueTable data={monthlyData} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -190,15 +147,11 @@ export function RevenueClient({ projects, sales, costs, addons, partners, fiscal
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-3">
-                <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
-                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {years.map(y => <SelectItem key={y} value={String(y)}>{y}年度</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {FYSelector}
                 <Button variant="outline" size="sm" onClick={exportExcel} className="gap-1.5">
                   <Download className="h-3.5 w-3.5" />Excel出力
                 </Button>
+                {summaryLoading && <span className="text-sm text-muted-foreground animate-pulse">読み込み中...</span>}
               </div>
             </CardHeader>
             <CardContent>
@@ -218,16 +171,14 @@ export function RevenueClient({ projects, sales, costs, addons, partners, fiscal
         <TabsContent value="trend">
           <Card>
             <CardHeader className="pb-2">
-              <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
-                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {years.map(y => <SelectItem key={y} value={String(y)}>{y}年度</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-3">
+                {FYSelector}
+                {summaryLoading && <span className="text-sm text-muted-foreground animate-pulse">読み込み中...</span>}
+              </div>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={monthlyData} margin={{ left: 10, right: 10 }}>
+                <BarChart data={monthlyTrendData} margin={{ left: 10, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={v => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
@@ -246,12 +197,10 @@ export function RevenueClient({ projects, sales, costs, addons, partners, fiscal
         <TabsContent value="vendor">
           <Card>
             <CardHeader className="pb-2">
-              <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
-                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {years.map(y => <SelectItem key={y} value={String(y)}>{y}年度</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-3">
+                {FYSelector}
+                {summaryLoading && <span className="text-sm text-muted-foreground animate-pulse">読み込み中...</span>}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-auto">
@@ -264,13 +213,16 @@ export function RevenueClient({ projects, sales, costs, addons, partners, fiscal
                     </tr>
                   </thead>
                   <tbody>
-                    {vendorData.map((v, i) => (
-                      <tr key={v.name} className="border-b last:border-0">
+                    {summary.vendor_ranking.map((v, i) => (
+                      <tr key={v.id} className="border-b last:border-0">
                         <td className="py-2 pr-3 text-muted-foreground">{i + 1}</td>
                         <td className="py-2 pr-3">{v.name}</td>
                         <td className="py-2 text-right">{formatYenFull(v.amount)}</td>
                       </tr>
                     ))}
+                    {summary.vendor_ranking.length === 0 && (
+                      <tr><td colSpan={3} className="py-6 text-center text-muted-foreground">データなし</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>

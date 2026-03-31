@@ -1,5 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { Project, Partner, Sale, Cost, Addon, User, DashboardSummary } from '@/types'
+import { Project, Partner, Sale, Cost, Addon, User, DashboardSummary, RevenueSummary, MonthlyRevenue } from '@/types'
 import { unstable_cache } from 'next/cache'
 import { perfStart } from '@/lib/perf'
 
@@ -453,6 +453,31 @@ export async function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<D
     }
   }
   return data as DashboardSummary
+}
+
+// ==========================================
+// Revenue RPC
+// ==========================================
+
+export async function getRevenueSummary(fyStart: Date, fyEnd: Date): Promise<RevenueSummary> {
+  const end = perfStart('getRevenueSummary')
+  const { data, error } = await supabase()
+    .rpc('get_revenue_summary', {
+      p_fy_start: fyStart.toISOString().split('T')[0],
+      p_fy_end:   fyEnd.toISOString().split('T')[0],
+    })
+  end()
+  if (error || !data) return { annual: [], monthly_trend: [], vendor_ranking: [] }
+  return data as RevenueSummary
+}
+
+export async function getMonthlyRevenue(month: string): Promise<MonthlyRevenue> {
+  const end = perfStart('getMonthlyRevenue')
+  const { data, error } = await supabase()
+    .rpc('get_monthly_revenue', { p_month: month })
+  end()
+  if (error || !data) return []
+  return data as MonthlyRevenue
 }
 
 // スタンドアロン用（ダッシュボード以外から呼ぶ場合）

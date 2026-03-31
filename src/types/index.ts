@@ -131,6 +131,39 @@ export interface DashboardSummary {
 }
 
 // ==========================================
+// 収支ページ集計型（Supabase RPC用）
+// ==========================================
+
+export interface RevenueSummary {
+  annual: {
+    project_id: string
+    site_name: string
+    contract: number
+    sales: number
+    costs: number
+    profit: number
+  }[]
+  monthly_trend: {
+    month: string
+    sales: number
+    costs: number
+  }[]
+  vendor_ranking: {
+    id: string
+    name: string
+    amount: number
+  }[]
+}
+
+export type MonthlyRevenue = {
+  project_id: string
+  site_name: string
+  sales: number
+  costs: number
+  profit: number
+}[]
+
+// ==========================================
 // OCR結果型
 // ==========================================
 

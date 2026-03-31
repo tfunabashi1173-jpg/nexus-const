@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { fetchProjects, fetchSales, fetchCosts, fetchAllAddons, fetchPartners, getSystemSetting } from '@/lib/db'
+import { getRevenueSummary, getMonthlyRevenue, getSystemSetting } from '@/lib/db'
+import { getFiscalYear, getFiscalYearRange } from '@/lib/utils/date'
 import { RevenueClient } from './RevenueClient'
 
 export const metadata: Metadata = {
@@ -8,23 +9,24 @@ export const metadata: Metadata = {
 }
 
 export default async function RevenuePage() {
-  const [projects, sales, costs, addons, partners, fiscalStartMonth] = await Promise.all([
-    fetchProjects(),
-    fetchSales(),
-    fetchCosts(),
-    fetchAllAddons(),
-    fetchPartners(),
-    getSystemSetting('FISCAL_START_MONTH', '4'),
+  const today = new Date()
+  const fiscalStartMonth = parseInt(await getSystemSetting('FISCAL_START_MONTH', '4'))
+  const currentFY = getFiscalYear(today, fiscalStartMonth)
+  const { start: fyStart, end: fyEnd } = getFiscalYearRange(currentFY, fiscalStartMonth)
+  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+
+  const [summary, monthlyData] = await Promise.all([
+    getRevenueSummary(fyStart, fyEnd),
+    getMonthlyRevenue(currentMonth),
   ])
 
   return (
     <RevenueClient
-      projects={projects}
-      sales={sales}
-      costs={costs}
-      addons={addons}
-      partners={partners}
-      fiscalStartMonth={parseInt(fiscalStartMonth)}
+      initialSummary={summary}
+      initialMonthlyData={monthlyData}
+      initialMonth={currentMonth}
+      currentFY={currentFY}
+      fiscalStartMonth={fiscalStartMonth}
     />
   )
 }
