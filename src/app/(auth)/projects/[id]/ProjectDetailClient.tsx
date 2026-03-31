@@ -494,28 +494,6 @@ function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partn
               {months.map(m => (
                 <th key={m} className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">{m}</th>
               ))}
-              <th className="py-2 px-2">
-                {addingMonth ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="month"
-                      className="border rounded px-1 py-0.5 text-xs"
-                      value={monthInput}
-                      onChange={e => setMonthInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') addMonthColumn(); if (e.key === 'Escape') setAddingMonth(false) }}
-                      autoFocus
-                    />
-                    <button onClick={addMonthColumn} className="text-blue-600 font-bold text-xs">✓</button>
-                    <button onClick={() => setAddingMonth(false)} className="text-muted-foreground text-xs">✕</button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setAddingMonth(true)}
-                    className="text-muted-foreground hover:text-foreground font-bold text-base leading-none"
-                    title="月を追加"
-                  >+</button>
-                )}
-              </th>
             </tr>
           </thead>
           <tbody>
@@ -525,7 +503,6 @@ function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partn
               {months.map(m => (
                 <td key={m} className="py-2 px-3 text-right whitespace-nowrap">{fmtAmt(monthTotal(m))}</td>
               ))}
-              <td />
             </tr>
             {vendors.map(vid => {
               const name = partnerMap[vid] ?? '(不明)'
@@ -553,12 +530,34 @@ function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partn
                       </td>
                     )
                   })}
-                  <td />
                 </tr>
               )
             })}
           </tbody>
         </table>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        {addingMonth ? (
+          <>
+            <input
+              type="month"
+              className="border rounded px-2 py-1 text-sm"
+              value={monthInput}
+              onChange={e => setMonthInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addMonthColumn(); if (e.key === 'Escape') setAddingMonth(false) }}
+              autoFocus
+            />
+            <button onClick={addMonthColumn} className="text-sm text-blue-600 font-medium hover:underline">追加</button>
+            <button onClick={() => setAddingMonth(false)} className="text-sm text-muted-foreground hover:text-foreground">キャンセル</button>
+          </>
+        ) : (
+          <button
+            onClick={() => setAddingMonth(true)}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+          >
+            <span className="text-base font-bold leading-none">+</span> 月を追加
+          </button>
+        )}
       </div>
 
       <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null) }}>
