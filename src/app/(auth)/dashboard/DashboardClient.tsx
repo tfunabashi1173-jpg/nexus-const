@@ -1,11 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { Project, Sale, Cost, Addon, Partner } from '@/types'
+import { useMemo, useState, useEffect } from 'react'
+import { Project, Addon, Partner, DashboardSummary } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatYen, formatYenFull } from '@/lib/utils/date'
 import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Select,
@@ -21,119 +20,100 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from 'recharts'
-import { AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
-
-interface AlertsData {
-  unpaid_sales: Sale[]
-  orphaned_costs: Cost[]
-  unbilled_costs: { project_id: string; site_name: string; cost_total: number; sales_total: number }[]
-}
 
 interface Props {
   projects: Project[]
-  sales: Sale[]
-  costs: Cost[]
   addons: Addon[]
   partners: Partner[]
-  alerts: AlertsData
+  initialSummary: DashboardSummary
   fiscalStartMonth: number
 }
 
-export function DashboardClient({ projects, sales, costs, addons, partners, alerts, fiscalStartMonth }: Props) {
+export function DashboardClient({ projects, addons, partners, initialSummary, fiscalStartMonth }: Props) {
   const today = new Date()
   const currentFY = getFiscalYear(today, fiscalStartMonth)
   const [selectedFY, setSelectedFY] = useState(currentFY)
-
-  const partnerMap = useMemo(() => {
-    return Object.fromEntries(partners.map(p => [p.partner_id, p.name]))
-  }, [partners])
-
-  const addonMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    addons.forEach(a => {
-      map[a.project_id] = (map[a.project_id] ?? 0) + a.amount
-    })
-    return map
-  }, [addons])
+  const [summary, setSummary] = useState<DashboardSummary>(initialSummary)
+  const [loading, setLoading] = useState(false)
 
   const { start: fyStart, end: fyEnd } = getFiscalYearRange(selectedFY, fiscalStartMonth)
 
-  const salesFY = useMemo(() =>
-    sales.filter(s => {
-      const d = new Date(s.billing_date)
-      return d >= fyStart && d <= fyEnd
-    }),
-    [sales, fyStart, fyEnd]
+  // 年度変更時: APIから集計データを再取得
+  useEffect(() => {
+    if (selectedFY === currentFY) {
+      setSummary(initialSummary)
+      return
+    }
+    const { start, end } = getFiscalYearRange(selectedFY, fiscalStartMonth)
+    const s = start.toISOString().split('T')[0]
+    const e = end.toISOString().split('T')[0]
+    setLoading(true)
+    fetch(`/api/dashboard-summary?fy_start=${s}&fy_end=${e}`)
+      .then(r => r.json())
+      .then(data => { setSummary(data); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [selectedFY]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const partnerMap = useMemo(
+    () => Object.fromEntries(partners.map(p => [p.partner_id, p.name])),
+    [partners]
   )
 
-  const costsFY = useMemo(() =>
-    costs.filter(c => {
-      const d = new Date(c.billing_month)
-      return d >= fyStart && d <= fyEnd
-    }),
-    [costs, fyStart, fyEnd]
+  const addonMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    addons.forEach(a => { map[a.project_id] = (map[a.project_id] ?? 0) + a.amount })
+    return map
+  }, [addons])
+
+  const activeProjects = useMemo(
+    () => projects.filter(p => ['着工中', '受注'].includes(p.status)),
+    [projects]
   )
 
-  const totalSales = salesFY.reduce((s, r) => s + r.amount, 0)
-  const totalCosts = costsFY.reduce((s, r) => s + r.amount, 0)
+  const totalSales  = summary.kpi.total_sales
+  const totalCosts  = summary.kpi.total_costs
   const totalProfit = totalSales - totalCosts
 
-  const activeProjects = projects.filter(p => ['着工中', '受注'].includes(p.status))
+  // DB側で計算済みのランキングをチャート用に整形
+  const staffSalesData = useMemo(() =>
+    summary.staff_ranking.map((s, i) => ({
+      name: i === 0 ? `🥇 ${s.name}` : i === 1 ? `🥈 ${s.name}` : i === 2 ? `🥉 ${s.name}` : s.name,
+      value: s.sales,
+    })),
+    [summary.staff_ranking]
+  )
 
-  // 社員別ランキング
-  const staffRanking = useMemo(() => {
-    const salesByProject: Record<string, number> = {}
-    salesFY.forEach(s => { salesByProject[s.project_id] = (salesByProject[s.project_id] ?? 0) + s.amount })
+  const staffProfitData = useMemo(() =>
+    [...summary.staff_ranking]
+      .sort((a, b) => b.profit - a.profit)
+      .map((s, i) => ({
+        name: i === 0 ? `🥇 ${s.name}` : i === 1 ? `🥈 ${s.name}` : i === 2 ? `🥉 ${s.name}` : s.name,
+        value: s.profit,
+      })),
+    [summary.staff_ranking]
+  )
 
-    const costsByProject: Record<string, number> = {}
-    costsFY.forEach(c => { if (c.project_id) costsByProject[c.project_id] = (costsByProject[c.project_id] ?? 0) + c.amount })
+  const customerRankingData = useMemo(() =>
+    summary.customer_ranking.map(r => ({
+      name: normalizeCompanyName(partnerMap[r.id] ?? r.id),
+      value: r.amount,
+    })),
+    [summary.customer_ranking, partnerMap]
+  )
 
-    const staffMap: Record<string, { sales: number; profit: number }> = {}
-    projects.forEach(p => {
-      const manager = p.manager_name ?? '(不明)'
-      const s = salesByProject[p.project_id] ?? 0
-      const c = costsByProject[p.project_id] ?? 0
-      if (!staffMap[manager]) staffMap[manager] = { sales: 0, profit: 0 }
-      staffMap[manager].sales += s
-      staffMap[manager].profit += s - c
-    })
+  const vendorRankingData = useMemo(() =>
+    summary.vendor_ranking.map(r => ({
+      name: normalizeCompanyName(partnerMap[r.id] ?? '(不明)'),
+      value: r.amount,
+    })),
+    [summary.vendor_ranking, partnerMap]
+  )
 
-    return Object.entries(staffMap)
-      .map(([name, v]) => ({ name, ...v }))
-      .sort((a, b) => b.sales - a.sales)
-  }, [projects, salesFY, costsFY])
-
-  // 得意先別ランキング
-  const customerRanking = useMemo(() => {
-    const projectCustomer = Object.fromEntries(projects.map(p => [p.project_id, p.customer_id]))
-    const map: Record<string, number> = {}
-    salesFY.forEach(s => {
-      const cid = projectCustomer[s.project_id]
-      if (cid) map[cid] = (map[cid] ?? 0) + s.amount
-    })
-    return Object.entries(map)
-      .map(([id, amount]) => ({ name: normalizeCompanyName(partnerMap[id] ?? id), amount }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 20)
-  }, [salesFY, projects, partnerMap])
-
-  // 支払先別ランキング
-  const vendorRanking = useMemo(() => {
-    const map: Record<string, number> = {}
-    costsFY.forEach(c => {
-      const name = normalizeCompanyName(partnerMap[c.vendor_id] ?? '(不明)')
-      map[name] = (map[name] ?? 0) + c.amount
-    })
-    return Object.entries(map)
-      .map(([name, amount]) => ({ name, amount }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 20)
-  }, [costsFY, partnerMap])
-
-  const hasAlerts = alerts.unpaid_sales.length > 0 || alerts.orphaned_costs.length > 0 || alerts.unbilled_costs.length > 0
+  const { alerts } = summary
+  const hasAlerts = alerts.unpaid_sales > 0 || alerts.orphaned_costs > 0 || alerts.unbilled_costs > 0
 
   return (
     <div className="space-y-6">
@@ -145,14 +125,14 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             <div className="flex flex-wrap gap-3 mt-1">
-              {alerts.orphaned_costs.length > 0 && (
-                <span>⚠️ 現場不明原価: <strong>{alerts.orphaned_costs.length}件</strong></span>
+              {alerts.orphaned_costs > 0 && (
+                <span>⚠️ 現場不明原価: <strong>{alerts.orphaned_costs}件</strong></span>
               )}
-              {alerts.unpaid_sales.length > 0 && (
-                <span>💰 未入金: <strong>{alerts.unpaid_sales.length}件</strong></span>
+              {alerts.unpaid_sales > 0 && (
+                <span>💰 未入金: <strong>{alerts.unpaid_sales}件</strong></span>
               )}
-              {alerts.unbilled_costs.length > 0 && (
-                <span>📋 未請求現場: <strong>{alerts.unbilled_costs.length}件</strong></span>
+              {alerts.unbilled_costs > 0 && (
+                <span>📋 未請求現場: <strong>{alerts.unbilled_costs}件</strong></span>
               )}
             </div>
           </AlertDescription>
@@ -174,11 +154,11 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
         <span className="text-sm text-muted-foreground">
           {format(fyStart, 'yyyy/MM/dd')} 〜 {format(fyEnd, 'yyyy/MM/dd')}
         </span>
+        {loading && <span className="text-sm text-muted-foreground animate-pulse">読み込み中...</span>}
       </div>
 
       {/* KPI + 稼働現場 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* KPI */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">📈 年間サマリー</CardTitle>
@@ -190,7 +170,6 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
           </CardContent>
         </Card>
 
-        {/* 稼働中現場 */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">🏗 稼働中現場</CardTitle>
@@ -211,7 +190,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
                   </thead>
                   <tbody>
                     {activeProjects.map(p => {
-                      const base = p.contract_amount ?? 0
+                      const base  = p.contract_amount ?? 0
                       const addon = addonMap[p.project_id] ?? 0
                       return (
                         <tr key={p.project_id} className="border-b last:border-0 hover:bg-muted/50">
@@ -239,7 +218,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
             <CardTitle className="text-base">🥇 社員別 売上</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={staffRanking.map((s, i) => ({ name: i === 0 ? `🥇 ${s.name}` : i === 1 ? `🥈 ${s.name}` : i === 2 ? `🥉 ${s.name}` : s.name, value: s.sales }))} color="#3b82f6" />
+            <RankingChart data={staffSalesData} color="#3b82f6" />
           </CardContent>
         </Card>
         <Card>
@@ -247,7 +226,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
             <CardTitle className="text-base">💰 社員別 利益</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={[...staffRanking].sort((a, b) => b.profit - a.profit).map((s, i) => ({ name: i === 0 ? `🥇 ${s.name}` : i === 1 ? `🥈 ${s.name}` : i === 2 ? `🥉 ${s.name}` : s.name, value: s.profit }))} color="#22c55e" />
+            <RankingChart data={staffProfitData} color="#22c55e" />
           </CardContent>
         </Card>
       </div>
@@ -259,7 +238,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
             <CardTitle className="text-base">🏢 得意先別 Top20</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={customerRanking.map(r => ({ name: r.name, value: r.amount }))} color="#f59e0b" />
+            <RankingChart data={customerRankingData} color="#f59e0b" />
           </CardContent>
         </Card>
         <Card>
@@ -267,7 +246,7 @@ export function DashboardClient({ projects, sales, costs, addons, partners, aler
             <CardTitle className="text-base">🔧 支払先別 Top20</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={vendorRanking.map(r => ({ name: r.name, value: r.amount }))} color="#8b5cf6" />
+            <RankingChart data={vendorRankingData} color="#8b5cf6" />
           </CardContent>
         </Card>
       </div>
@@ -289,11 +268,11 @@ function KpiRow({ label, value, highlight }: { label: string; value: number; hig
 function RankingChart({ data, color }: { data: { name: string; value: number }[]; color: string }) {
   if (!data.length) return <p className="text-sm text-muted-foreground">データなし</p>
 
-  const sorted = [...data].sort((a, b) => b.value - a.value)
-  const height = Math.max(200, sorted.length * 28)
+  const sorted    = [...data].sort((a, b) => b.value - a.value)
+  const height    = Math.max(200, sorted.length * 28)
   const maxNameLen = Math.max(...sorted.map(d => d.name.length))
   const yAxisWidth = Math.min(Math.max(maxNameLen * 12, 100), 240)
-  const gradId = `grad-${color.replace('#', '')}`
+  const gradId    = `grad-${color.replace('#', '')}`
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -306,7 +285,7 @@ function RankingChart({ data, color }: { data: { name: string; value: number }[]
         </defs>
         <XAxis type="number" tickFormatter={v => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
         <YAxis type="category" dataKey="name" width={yAxisWidth} tick={{ fontSize: 11 }} tickLine={false} />
-        <Tooltip formatter={(v: any) => [`¥${v.toLocaleString()}`, "金額"]} />
+        <Tooltip formatter={(v: any) => [`¥${v.toLocaleString()}`, '金額']} />
         <Bar dataKey="value" fill={`url(#${gradId})`} radius={[0, 3, 3, 0]} />
       </BarChart>
     </ResponsiveContainer>

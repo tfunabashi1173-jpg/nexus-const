@@ -101,6 +101,36 @@ export interface AlertData {
 }
 
 // ==========================================
+// ダッシュボード集計型（Supabase RPC用）
+// ==========================================
+
+export interface DashboardSummary {
+  kpi: {
+    total_sales: number
+    total_costs: number
+  }
+  staff_ranking: {
+    manager_id: string
+    name: string
+    sales: number
+    profit: number
+  }[]
+  customer_ranking: {
+    id: string
+    amount: number
+  }[]
+  vendor_ranking: {
+    id: string
+    amount: number
+  }[]
+  alerts: {
+    unpaid_sales: number
+    orphaned_costs: number
+    unbilled_costs: number
+  }
+}
+
+// ==========================================
 // OCR結果型
 // ==========================================
 

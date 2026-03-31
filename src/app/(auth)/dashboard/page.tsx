@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
-import { fetchProjects, fetchSales, fetchCosts, fetchAllAddons, fetchPartners, getAlertData, getSystemSetting } from '@/lib/db'
+import { fetchProjects, fetchAllAddons, fetchPartners, getDashboardSummary, getSystemSetting } from '@/lib/db'
+import { getFiscalYear, getFiscalYearRange } from '@/lib/utils/date'
+import { perfStart } from '@/lib/perf'
 import { DashboardClient } from './DashboardClient'
 
 export const metadata: Metadata = {
@@ -8,25 +10,28 @@ export const metadata: Metadata = {
 }
 
 export default async function DashboardPage() {
-  const [projects, sales, costs, addons, partners, alerts, fiscalStartMonth] = await Promise.all([
-    fetchProjects(),
-    fetchSales(),
-    fetchCosts(),
-    fetchAllAddons(),
-    fetchPartners(),
-    getAlertData(),
-    getSystemSetting('FISCAL_START_MONTH', '4'),
+  const end = perfStart('dashboard page total')
+
+  // getSystemSetting はキャッシュ済みなので await しても高速
+  const fiscalStartMonth = parseInt(await getSystemSetting('FISCAL_START_MONTH', '4'))
+  const currentFY = getFiscalYear(new Date(), fiscalStartMonth)
+  const { start: fyStart, end: fyEnd } = getFiscalYearRange(currentFY, fiscalStartMonth)
+
+  const [projects, addons, partners, summary] = await Promise.all([
+    fetchProjects(),          // 稼働中現場表示・追加工事金額用
+    fetchAllAddons(),         // 稼働中現場の追加工事金額用
+    fetchPartners(),          // キャッシュ済み。ランキング名前解決用
+    getDashboardSummary(fyStart, fyEnd), // KPI・ランキング・アラートをDB側で一括計算
   ])
+  end()
 
   return (
     <DashboardClient
       projects={projects}
-      sales={sales}
-      costs={costs}
       addons={addons}
       partners={partners}
-      alerts={alerts}
-      fiscalStartMonth={parseInt(fiscalStartMonth)}
+      initialSummary={summary}
+      fiscalStartMonth={fiscalStartMonth}
     />
   )
 }

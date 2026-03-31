@@ -48,9 +48,16 @@ export async function POST(req: NextRequest) {
 }
 `
 
-    const result = await model.generateContent([
-      { inlineData: { mimeType: file.type, data: base64 } },
-      prompt,
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('TIMEOUT')), 30000)
+    )
+
+    const result = await Promise.race([
+      model.generateContent([
+        { inlineData: { mimeType: file.type, data: base64 } },
+        prompt,
+      ]),
+      timeoutPromise,
     ])
 
     const text = result.response.text()
@@ -59,6 +66,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(data)
   } catch (e: any) {
+    if (e.message === 'TIMEOUT') {
+      return NextResponse.json({ error: 'OCR処理がタイムアウトしました（30秒）' }, { status: 504 })
+    }
     return NextResponse.json({ error: `解析エラー: ${e.message}` }, { status: 500 })
   }
 }

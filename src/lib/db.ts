@@ -1,5 +1,7 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { Project, Partner, Sale, Cost, Addon, User } from '@/types'
+import { Project, Partner, Sale, Cost, Addon, User, DashboardSummary } from '@/types'
+import { unstable_cache } from 'next/cache'
+import { perfStart } from '@/lib/perf'
 
 const supabase = () => createServiceRoleClient()
 const ACTIVE = 'is_deleted.is.null,is_deleted.eq.false'
@@ -8,11 +10,13 @@ const ACTIVE = 'is_deleted.is.null,is_deleted.eq.false'
 // Projects
 // ==========================================
 export async function fetchProjects(): Promise<Project[]> {
+  const end = perfStart('fetchProjects')
   const { data } = await supabase()
     .from('projects')
     .select('*, users(username)')
     .or(ACTIVE)
     .order('start_date', { ascending: false })
+  end()
   if (!data) return []
   return data.map((p: any) => ({
     ...p,
@@ -59,30 +63,38 @@ export async function softDeleteProject(id: string) {
 }
 
 export async function getNextProjectId(): Promise<string> {
+  const end = perfStart('getNextProjectId')
   const prefix = new Date().toISOString().slice(0, 7).replace('-', '')
   const { data } = await supabase()
     .from('projects')
     .select('project_id')
     .like('project_id', `${prefix}%`)
-  const nums = (data ?? []).map((r: any) => {
-    const n = parseInt(r.project_id.slice(6))
-    return isNaN(n) ? 0 : n
-  })
-  const next = nums.length > 0 ? Math.max(...nums) + 1 : 1
+    .order('project_id', { ascending: false })
+    .limit(1)
+  end()
+  const last = data?.[0]?.project_id
+  const next = last ? parseInt(last.slice(6)) + 1 : 1
   return `${prefix}${String(next).padStart(3, '0')}`
 }
 
 // ==========================================
 // Partners
 // ==========================================
-export async function fetchPartners(): Promise<Partner[]> {
+async function fetchPartnersImpl(): Promise<Partner[]> {
+  const end = perfStart('fetchPartners')
   const { data } = await supabase()
     .from('partners')
     .select('*')
     .or(ACTIVE)
     .order('name')
+  end()
   return data ?? []
 }
+
+export const fetchPartners = unstable_cache(fetchPartnersImpl, ['partners'], {
+  tags: ['partners'],
+  revalidate: 60,
+})
 
 export async function createPartner(partner: Omit<Partner, 'is_deleted' | 'deleted_at'>) {
   const { data, error } = await supabase().from('partners').insert(partner).select().single()
@@ -111,11 +123,13 @@ export async function softDeletePartner(id: string) {
 // Sales
 // ==========================================
 export async function fetchSales(): Promise<Sale[]> {
+  const end = perfStart('fetchSales')
   const { data } = await supabase()
     .from('sales')
     .select('*')
     .or(ACTIVE)
     .order('billing_date', { ascending: false })
+  end()
   return data ?? []
 }
 
@@ -156,11 +170,13 @@ export async function softDeleteSale(id: string) {
 // Costs
 // ==========================================
 export async function fetchCosts(): Promise<Cost[]> {
+  const end = perfStart('fetchCosts')
   const { data } = await supabase()
     .from('costs')
     .select('*')
     .or(ACTIVE)
     .order('billing_month', { ascending: false })
+  end()
   return data ?? []
 }
 
@@ -211,10 +227,12 @@ export async function fetchAddonsByProject(projectId: string): Promise<Addon[]> 
 }
 
 export async function fetchAllAddons(): Promise<Addon[]> {
+  const end = perfStart('fetchAllAddons')
   const { data } = await supabase()
     .from('addons')
     .select('*')
     .or(ACTIVE)
+  end()
   return data ?? []
 }
 
@@ -279,13 +297,21 @@ export async function softDeleteUser(id: string) {
 // ==========================================
 // System Settings
 // ==========================================
-export async function getSystemSetting(key: string, defaultValue: string = ''): Promise<string> {
+async function getSystemSettingImpl(key: string, defaultValue: string): Promise<string> {
   const { data } = await supabase()
     .from('system_settings')
     .select('setting_value')
     .eq('setting_key', key)
     .single()
   return data?.setting_value ?? defaultValue
+}
+
+export function getSystemSetting(key: string, defaultValue: string = ''): Promise<string> {
+  return unstable_cache(
+    () => getSystemSettingImpl(key, defaultValue),
+    ['settings', key],
+    { tags: ['settings'], revalidate: 3600 }
+  )()
 }
 
 export async function saveSystemSetting(key: string, value: string, description: string = '') {
@@ -361,39 +387,28 @@ export async function autoUpdateStatuses(): Promise<{ updated: boolean; message:
 // ==========================================
 // Alert Data
 // ==========================================
-export async function getAlertData() {
-  const today = new Date().toISOString().split('T')[0]
 
-  const [salesData, costsData, projectsData] = await Promise.all([
-    fetchSales(),
-    fetchCosts(),
-    fetchProjects(),
-  ])
+// DBアクセスなし。既に取得済みデータからアラートを計算する純粋関数
+export function computeAlerts(projects: Project[], sales: Sale[], costs: Cost[]) {
+  const projectIds = new Set(projects.map(p => p.project_id))
 
-  const projectIds = new Set(projectsData.map(p => p.project_id))
+  const unpaid_sales = sales.filter(s => !s.deposit_status)
 
-  // 入金遅延（入金予定日を過ぎた未入金売上）
-  const unpaid_sales = salesData.filter(s =>
-    !s.deposit_status
-  )
-
-  // 現場不明原価（project_idがnullまたは存在しないプロジェクト）
-  const orphaned_costs = costsData.filter(c =>
+  const orphaned_costs = costs.filter(c =>
     !c.project_id || !projectIds.has(c.project_id)
   )
 
-  // 原価超過（原価合計 > 売上合計）
-  const projectSales = salesData.reduce((acc, s) => {
+  const projectSales = sales.reduce((acc, s) => {
     acc[s.project_id] = (acc[s.project_id] ?? 0) + s.amount
     return acc
   }, {} as Record<string, number>)
 
-  const projectCosts = costsData.filter(c => c.project_id).reduce((acc, c) => {
+  const projectCosts = costs.filter(c => c.project_id).reduce((acc, c) => {
     acc[c.project_id!] = (acc[c.project_id!] ?? 0) + c.amount
     return acc
   }, {} as Record<string, number>)
 
-  const unbilled_costs = projectsData
+  const unbilled_costs = projects
     .filter(p => {
       const cost = projectCosts[p.project_id] ?? 0
       const sale = projectSales[p.project_id] ?? 0
@@ -407,4 +422,40 @@ export async function getAlertData() {
     }))
 
   return { unpaid_sales, orphaned_costs, unbilled_costs }
+}
+
+// ==========================================
+// Dashboard RPC
+// ==========================================
+
+// Supabase側でKPI・ランキング・アラートを一括計算して返す
+// fetchSales() / fetchCosts() の全件転送を完全排除
+export async function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<DashboardSummary> {
+  const end = perfStart('getDashboardSummary')
+  const { data, error } = await supabase()
+    .rpc('get_dashboard_summary', {
+      p_fy_start: fyStart.toISOString().split('T')[0],
+      p_fy_end:   fyEnd.toISOString().split('T')[0],
+    })
+  end()
+  if (error || !data) {
+    return {
+      kpi: { total_sales: 0, total_costs: 0 },
+      staff_ranking: [],
+      customer_ranking: [],
+      vendor_ranking: [],
+      alerts: { unpaid_sales: 0, orphaned_costs: 0, unbilled_costs: 0 },
+    }
+  }
+  return data as DashboardSummary
+}
+
+// スタンドアロン用（ダッシュボード以外から呼ぶ場合）
+export async function getAlertData() {
+  const [salesData, costsData, projectsData] = await Promise.all([
+    fetchSales(),
+    fetchCosts(),
+    fetchProjects(),
+  ])
+  return computeAlerts(projectsData, salesData, costsData)
 }
