@@ -424,6 +424,13 @@ function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Reco
           </tr>
         </thead>
         <tbody>
+          <tr className="border-b font-bold bg-muted/30">
+            <td className="py-2 pr-4 sticky left-0 bg-muted/30">合計</td>
+            <td className="py-2 px-3 text-right">{fmtAmt(grandTotal)}</td>
+            {months.map(m => (
+              <td key={m} className="py-2 px-3 text-right whitespace-nowrap">{fmtAmt(monthTotal(m))}</td>
+            ))}
+          </tr>
           {vendors.map(vid => {
             const name = partnerMap[vid] ?? '(不明)'
             const shortName = normalizeCompanyName(name)
@@ -440,15 +447,6 @@ function CostPivotTable({ costs, partnerMap }: { costs: Cost[]; partnerMap: Reco
             )
           })}
         </tbody>
-        <tfoot>
-          <tr className="border-t font-bold">
-            <td className="py-2 pr-4 sticky left-0 bg-background">合計</td>
-            <td className="py-2 px-3 text-right">{fmtAmt(grandTotal)}</td>
-            {months.map(m => (
-              <td key={m} className="py-2 px-3 text-right whitespace-nowrap">{fmtAmt(monthTotal(m))}</td>
-            ))}
-          </tr>
-        </tfoot>
       </table>
     </div>
   )
