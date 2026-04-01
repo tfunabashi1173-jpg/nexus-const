@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { Project, Addon, Partner, DashboardSummary } from '@/types'
-import { getFiscalYear, getFiscalYearRange, formatYen, formatYenFull } from '@/lib/utils/date'
+import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYen, formatYenFull } from '@/lib/utils/date'
 import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -48,8 +48,8 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
       return
     }
     const { start, end } = getFiscalYearRange(selectedFY, fiscalStartMonth)
-    const s = start.toISOString().split('T')[0]
-    const e = end.toISOString().split('T')[0]
+    const s = formatDateLocal(start)
+    const e = formatDateLocal(end)
     setLoading(true)
     fetch(`/api/dashboard-summary?fy_start=${s}&fy_end=${e}`)
       .then(r => r.json())
@@ -117,7 +117,25 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">📊 経営状況</h1>
+      {/* ページヘッダー */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">経営状況</h1>
+        <div className="flex items-center gap-3 mt-2">
+          <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
+            <SelectTrigger className="w-auto min-w-36 bg-white">
+              <span className="mr-1">
+                {selectedFY}年度 ({selectedFY}/{fiscalStartMonth}〜{selectedFY + 1}/{fiscalStartMonth === 1 ? 12 : fiscalStartMonth - 1})
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {[currentFY, currentFY - 1, currentFY - 2].map(fy => (
+                <SelectItem key={fy} value={String(fy)}>{fy}年度</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {loading && <span className="text-sm text-slate-400 animate-pulse">読み込み中...</span>}
+        </div>
+      </div>
 
       {/* アラート */}
       {hasAlerts && (
@@ -139,38 +157,25 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
         </Alert>
       )}
 
-      {/* 年度セレクタ */}
-      <div className="flex items-center gap-3">
-        <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[currentFY, currentFY - 1, currentFY - 2].map(fy => (
-              <SelectItem key={fy} value={String(fy)}>{fy}年度</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="text-sm text-muted-foreground">
-          {format(fyStart, 'yyyy/MM/dd')} 〜 {format(fyEnd, 'yyyy/MM/dd')}
-        </span>
-        {loading && <span className="text-sm text-muted-foreground animate-pulse">読み込み中...</span>}
+      {/* KPI 大カード */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-blue-600 rounded-xl p-5 text-white shadow-sm">
+          <p className="text-sm font-medium text-blue-100">売上（請求済）</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalSales)}</p>
+        </div>
+        <div className="bg-slate-700 rounded-xl p-5 text-white shadow-sm">
+          <p className="text-sm font-medium text-slate-300">原価（発生済）</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalCosts)}</p>
+        </div>
+        <div className={`rounded-xl p-5 text-white shadow-sm ${totalProfit >= 0 ? 'bg-emerald-600' : 'bg-red-600'}`}>
+          <p className={`text-sm font-medium ${totalProfit >= 0 ? 'text-emerald-100' : 'text-red-100'}`}>粗利</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalProfit)}</p>
+        </div>
       </div>
 
-      {/* KPI + 稼働現場 */}
+      {/* 稼働現場 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">📈 年間サマリー</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <KpiRow label="売上（請求済）" value={totalSales} />
-            <KpiRow label="原価（発生済）" value={totalCosts} />
-            <KpiRow label="粗利" value={totalProfit} highlight />
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-3 bg-white shadow-sm border-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">🏗 稼働中現場</CardTitle>
           </CardHeader>
@@ -181,11 +186,11 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
               <div className="overflow-auto max-h-64">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-1 pr-3 font-medium text-muted-foreground">現場名</th>
-                      <th className="text-left py-1 pr-3 font-medium text-muted-foreground">工期</th>
-                      <th className="text-left py-1 pr-3 font-medium text-muted-foreground">担当</th>
-                      <th className="text-right py-1 font-medium text-muted-foreground">金額</th>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="text-left py-2.5 px-3 font-medium text-sm">現場名</th>
+                      <th className="text-left py-2.5 px-3 font-medium text-sm">工期</th>
+                      <th className="text-left py-2.5 px-3 font-medium text-sm">担当</th>
+                      <th className="text-right py-2.5 px-3 font-medium text-sm">金額</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -193,13 +198,13 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
                       const base  = p.contract_amount ?? 0
                       const addon = addonMap[p.project_id] ?? 0
                       return (
-                        <tr key={p.project_id} className="border-b last:border-0 hover:bg-muted/50">
-                          <td className="py-1.5 pr-3 font-medium">{p.site_name}</td>
-                          <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                        <tr key={p.project_id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
+                          <td className="py-2.5 px-3 font-medium">{p.site_name}</td>
+                          <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap text-xs">
                             {p.start_date?.slice(0, 7)} 〜 {p.end_date?.slice(0, 7)}
                           </td>
-                          <td className="py-1.5 pr-3 text-muted-foreground">{p.manager_name}</td>
-                          <td className="py-1.5 text-right">{formatYenFull(base + addon)}</td>
+                          <td className="py-2.5 px-3 text-slate-500">{p.manager_name}</td>
+                          <td className="py-2.5 px-3 text-right font-medium tabular-nums">{formatYenFull(base + addon)}</td>
                         </tr>
                       )
                     })}
@@ -213,17 +218,17 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
 
       {/* 社員別ランキング */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
+        <Card className="bg-white shadow-sm border-0">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">🥇 社員別 売上</CardTitle>
+            <CardTitle className="text-base font-semibold text-slate-700">社員別 売上</CardTitle>
           </CardHeader>
           <CardContent>
             <RankingChart data={staffSalesData} color="#3b82f6" />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white shadow-sm border-0">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">💰 社員別 利益</CardTitle>
+            <CardTitle className="text-base font-semibold text-slate-700">社員別 利益</CardTitle>
           </CardHeader>
           <CardContent>
             <RankingChart data={staffProfitData} color="#22c55e" />
@@ -233,17 +238,17 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
 
       {/* 得意先・支払先 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
+        <Card className="bg-white shadow-sm border-0">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">🏢 得意先別 Top20</CardTitle>
+            <CardTitle className="text-base font-semibold text-slate-700">得意先別 Top20</CardTitle>
           </CardHeader>
           <CardContent>
             <RankingChart data={customerRankingData} color="#f59e0b" />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white shadow-sm border-0">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">🔧 支払先別 Top20</CardTitle>
+            <CardTitle className="text-base font-semibold text-slate-700">支払先別 Top20</CardTitle>
           </CardHeader>
           <CardContent>
             <RankingChart data={vendorRankingData} color="#8b5cf6" />

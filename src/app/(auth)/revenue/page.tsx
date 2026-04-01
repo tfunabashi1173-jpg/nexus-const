@@ -11,14 +11,22 @@ export const metadata: Metadata = {
 export default async function RevenuePage() {
   const today = new Date()
   const fiscalStartMonth = parseInt(await getSystemSetting('FISCAL_START_MONTH', '4'))
-  const currentFY = getFiscalYear(today, fiscalStartMonth)
-  const { start: fyStart, end: fyEnd } = getFiscalYearRange(currentFY, fiscalStartMonth)
+  let currentFY = getFiscalYear(today, fiscalStartMonth)
+  let { start: fyStart, end: fyEnd } = getFiscalYearRange(currentFY, fiscalStartMonth)
   const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
 
-  const [summary, monthlyData] = await Promise.all([
-    getRevenueSummary(fyStart, fyEnd),
-    getMonthlyRevenue(currentMonth),
-  ])
+  let summary = await getRevenueSummary(fyStart, fyEnd)
+
+  // 当期にデータがない場合（期初直後など）は前期を初期表示
+  if (summary.annual.length === 0) {
+    currentFY = currentFY - 1
+    const prev = getFiscalYearRange(currentFY, fiscalStartMonth)
+    fyStart = prev.start
+    fyEnd = prev.end
+    summary = await getRevenueSummary(fyStart, fyEnd)
+  }
+
+  const monthlyData = await getMonthlyRevenue(currentMonth)
 
   return (
     <RevenueClient

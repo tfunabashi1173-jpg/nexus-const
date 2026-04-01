@@ -64,8 +64,8 @@ export function ProjectsClient({ projects, customers }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">🛠 現場一覧</h1>
-        <Badge variant="secondary">{filtered.length}件</Badge>
+        <h1 className="text-2xl font-bold text-slate-900">現場一覧</h1>
+        <span className="bg-slate-800 text-white text-xs font-semibold px-3 py-1 rounded-full">{filtered.length}件</span>
       </div>
 
       {/* フィルター */}
@@ -103,22 +103,22 @@ export function ProjectsClient({ projects, customers }: Props) {
       </div>
 
       {/* 一覧 */}
-      <div className="overflow-auto rounded-lg border bg-background">
+      <div className="overflow-auto rounded-lg shadow-sm border-0 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="text-left py-2 px-3 font-medium text-muted-foreground">工事ID</th>
-              <th className="text-left py-2 px-3 font-medium text-muted-foreground">現場名</th>
-              <th className="text-left py-2 px-3 font-medium text-muted-foreground">ステータス</th>
-              <th className="text-left py-2 px-3 font-medium text-muted-foreground">得意先</th>
-              <th className="text-left py-2 px-3 font-medium text-muted-foreground">担当</th>
-              <th className="text-left py-2 px-3 font-medium text-muted-foreground">工期</th>
-              <th className="text-right py-2 px-3 font-medium text-muted-foreground">請負金額</th>
+            <tr className="bg-slate-800 text-white">
+              <th className="text-left py-3 px-3 font-medium">工事ID</th>
+              <th className="text-left py-3 px-3 font-medium">現場名</th>
+              <th className="text-left py-3 px-3 font-medium">ステータス</th>
+              <th className="text-left py-3 px-3 font-medium">得意先</th>
+              <th className="text-left py-3 px-3 font-medium">担当</th>
+              <th className="text-left py-3 px-3 font-medium">工期</th>
+              <th className="text-right py-3 px-3 font-medium">請負金額</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(p => (
-              <tr key={p.project_id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+            {filtered.map((p, i) => (
+              <tr key={p.project_id} className={`border-b last:border-0 hover:bg-blue-50 transition-colors ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                 <td className="py-2 px-3">
                   <Link href={`/projects/${p.project_id}`} className="text-primary hover:underline font-mono text-xs">
                     {p.project_id}

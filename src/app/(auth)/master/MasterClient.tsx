@@ -151,16 +151,16 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate 
               <div className="overflow-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">ID</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">名前</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">権限</th>
-                      <th className="py-2"></th>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="text-left py-2.5 px-3 font-medium">ID</th>
+                      <th className="text-left py-2.5 px-3 font-medium">名前</th>
+                      <th className="text-left py-2.5 px-3 font-medium">権限</th>
+                      <th className="py-2.5 px-3"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map(u => (
-                      <tr key={u.user_id} className="border-b last:border-0">
+                    {users.map((u, i) => (
+                      <tr key={u.user_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 pr-3 font-mono text-xs">{u.user_id}</td>
                         <td className="py-2 pr-3">{u.username}</td>
                         <td className="py-2 pr-3">
@@ -216,19 +216,19 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate 
                 <div className="overflow-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2 pr-3 font-medium text-muted-foreground">名称</th>
+                      <tr className="bg-slate-800 text-white">
+                        <th className="text-left py-2.5 px-3 font-medium">名称</th>
                         {cat === '得意先' && <>
-                          <th className="text-center py-2 pr-3 font-medium text-muted-foreground">締日</th>
-                          <th className="text-center py-2 pr-3 font-medium text-muted-foreground">入金月</th>
-                          <th className="text-center py-2 pr-3 font-medium text-muted-foreground">入金日</th>
+                          <th className="text-center py-2.5 px-3 font-medium">締日</th>
+                          <th className="text-center py-2.5 px-3 font-medium">入金月</th>
+                          <th className="text-center py-2.5 px-3 font-medium">入金日</th>
                         </>}
-                        <th className="py-2"></th>
+                        <th className="py-2.5 px-3"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {partnersByCategory(cat).map(p => (
-                        <tr key={p.partner_id} className="border-b last:border-0">
+                      {partnersByCategory(cat).map((p, i) => (
+                        <tr key={p.partner_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                           <td className="py-2 pr-3">{p.name}</td>
                           {cat === '得意先' && <>
                             <td className="py-2 pr-3 text-center">{p.closing_day === 99 ? '末日' : p.closing_day}</td>

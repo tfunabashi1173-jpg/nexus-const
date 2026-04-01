@@ -77,27 +77,24 @@ export function AppSidebar({ user }: AppSidebarProps) {
   }
 
   return (
-    <aside className="fixed top-0 left-0 w-56 h-screen bg-background border-r flex flex-col z-40 overflow-hidden">
+    <aside className="fixed top-0 left-0 w-56 h-screen bg-slate-900 flex flex-col z-40 overflow-hidden">
       {/* ヘッダー */}
-      <div className="p-4 border-b">
-        <h1 className="font-bold text-sm text-foreground leading-tight">
-          NEXUS<br />工事管理システム
-        </h1>
+      <div className="px-5 py-5 border-b border-slate-700">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-0.5">NEXUS</p>
+        <h1 className="font-bold text-white text-sm leading-tight">工事管理システム</h1>
       </div>
 
       {/* 日付・ユーザー */}
-      <div className="p-4 space-y-1">
-        <p className="text-xs text-muted-foreground">{dateStr}</p>
-        <p className="text-sm font-medium">👤 {user.username}</p>
+      <div className="px-5 py-3 border-b border-slate-700">
+        <p className="text-xs text-slate-400">{dateStr}</p>
+        <p className="text-sm font-medium text-slate-200 mt-0.5">👤 {user.username}</p>
       </div>
 
-      <Separator />
-
       {/* ナビゲーション */}
-      <nav className="flex-1 p-2 space-y-4 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
         {navItems.map((section) => (
           <div key={section.section}>
-            <p className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <p className="px-2 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               {section.section}
             </p>
             <div className="space-y-0.5">
@@ -111,10 +108,10 @@ export function AppSidebar({ user }: AppSidebarProps) {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors',
+                      'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
                       isActive
-                        ? 'bg-primary text-primary-foreground'
-                        : 'hover:bg-accent hover:text-accent-foreground text-foreground'
+                        ? 'bg-blue-600 text-white font-medium'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
@@ -128,16 +125,16 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
         {user.role === 'admin' && (
           <div>
-            <p className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <p className="px-2 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               設定
             </p>
             <Link
               href={adminItem.href}
               className={cn(
-                'flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors',
+                'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
                 pathname.startsWith(adminItem.href)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-accent hover:text-accent-foreground text-foreground'
+                  ? 'bg-blue-600 text-white font-medium'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               )}
             >
               <Settings className="h-4 w-4 shrink-0" />
@@ -147,37 +144,30 @@ export function AppSidebar({ user }: AppSidebarProps) {
         )}
       </nav>
 
-      <Separator />
+      <div className="border-t border-slate-700" />
 
       {/* フッター */}
-      <div className="p-3 space-y-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full justify-start gap-2 text-xs"
+      <div className="px-3 py-3 space-y-1">
+        <button
           onClick={handleRefresh}
           disabled={isPending}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={cn('h-3.5 w-3.5', isPending && 'animate-spin')} />
+          <RefreshCw className={cn('h-3.5 w-3.5 shrink-0', isPending && 'animate-spin')} />
           データ最新化
-        </Button>
+        </button>
 
         <form action={logout}>
-          <Button
+          <button
             type="submit"
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-xs text-muted-foreground"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
           >
-            <LogOut className="h-3.5 w-3.5" />
+            <LogOut className="h-3.5 w-3.5 shrink-0" />
             ログアウト
-          </Button>
+          </button>
         </form>
 
-        <p className="text-xs text-center text-muted-foreground">
-          © 2025 DESIGN OFFICE NEXUS
-        </p>
-        <p className="text-xs text-center text-muted-foreground/50">v2.0.0</p>
+        <p className="text-xs text-center text-slate-600 pt-1">v2.0.0</p>
       </div>
     </aside>
   )

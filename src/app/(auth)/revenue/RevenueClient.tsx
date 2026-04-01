@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { RevenueSummary, MonthlyRevenue } from '@/types'
-import { getFiscalYearRange, formatYenFull } from '@/lib/utils/date'
+import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYenFull } from '@/lib/utils/date'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -34,6 +34,7 @@ export function RevenueClient({
   const [monthlyData, setMonthlyData] = useState<MonthlyRevenue>(initialMonthlyData)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [monthlyLoading, setMonthlyLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState('annual')
 
   // 年度変更 → サマリー再取得
   useEffect(() => {
@@ -42,8 +43,8 @@ export function RevenueClient({
       return
     }
     const { start, end } = getFiscalYearRange(selectedFY, fiscalStartMonth)
-    const s = start.toISOString().split('T')[0]
-    const e = end.toISOString().split('T')[0]
+    const s = formatDateLocal(start)
+    const e = formatDateLocal(end)
     setSummaryLoading(true)
     fetch(`/api/revenue-summary?fy_start=${s}&fy_end=${e}`)
       .then(r => r.json())
@@ -79,7 +80,8 @@ export function RevenueClient({
     [summary.monthly_trend]
   )
 
-  const years = [currentFY, currentFY - 1, currentFY - 2]
+  const trueCurrentFY = getFiscalYear(today, fiscalStartMonth)
+  const years = Array.from(new Set([trueCurrentFY, currentFY, currentFY - 1, currentFY - 2])).sort((a, b) => b - a)
   const monthOptions: string[] = []
   for (let i = 0; i < 24; i++) {
     const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
@@ -101,11 +103,18 @@ export function RevenueClient({
     a.click()
   }
 
+  const endMonth = fiscalStartMonth === 1 ? 12 : fiscalStartMonth - 1
+  const fyLabel = (y: number) => `${y}年度 (${y}/${fiscalStartMonth}〜${y + 1}/${endMonth})`
+
   const FYSelector = (
     <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
-      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+      <SelectTrigger className="w-auto min-w-36">
+        <span className="mr-1">{fyLabel(selectedFY)}</span>
+      </SelectTrigger>
       <SelectContent>
-        {years.map(y => <SelectItem key={y} value={String(y)}>{y}年度</SelectItem>)}
+        {years.map(y => (
+          <SelectItem key={y} value={String(y)}>{y}年度</SelectItem>
+        ))}
       </SelectContent>
     </Select>
   )
@@ -114,7 +123,7 @@ export function RevenueClient({
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">💴 収支一覧・分析</h1>
 
-      <Tabs defaultValue="annual">
+      <Tabs defaultValue="annual" onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="monthly">月次収支</TabsTrigger>
           <TabsTrigger value="annual">年次収支</TabsTrigger>
@@ -177,7 +186,7 @@ export function RevenueClient({
               </div>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
+<ResponsiveContainer key={activeTab} width="100%" height={350}>
                 <BarChart data={monthlyTrendData} margin={{ left: 10, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
@@ -206,15 +215,15 @@ export function RevenueClient({
               <div className="overflow-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">順位</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">業者名</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">発注額</th>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="text-left py-2.5 px-3 font-medium">順位</th>
+                      <th className="text-left py-2.5 px-3 font-medium">業者名</th>
+                      <th className="text-right py-2.5 px-3 font-medium">発注額</th>
                     </tr>
                   </thead>
                   <tbody>
                     {summary.vendor_ranking.map((v, i) => (
-                      <tr key={v.id} className="border-b last:border-0">
+                      <tr key={v.id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 pr-3 text-muted-foreground">{i + 1}</td>
                         <td className="py-2 pr-3">{v.name}</td>
                         <td className="py-2 text-right">{formatYenFull(v.amount)}</td>
@@ -243,16 +252,16 @@ function RevenueTable({ data }: { data: { project_id: string; site_name: string;
     <div className="overflow-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b">
-            <th className="text-left py-2 pr-3 font-medium text-muted-foreground">現場名</th>
-            <th className="text-right py-2 pr-3 font-medium text-muted-foreground">売上</th>
-            <th className="text-right py-2 pr-3 font-medium text-muted-foreground">原価</th>
-            <th className="text-right py-2 font-medium text-muted-foreground">粗利</th>
+          <tr className="bg-slate-800 text-white">
+            <th className="text-left py-2.5 px-3 font-medium">現場名</th>
+            <th className="text-right py-2.5 px-3 font-medium">売上</th>
+            <th className="text-right py-2.5 px-3 font-medium">原価</th>
+            <th className="text-right py-2.5 px-3 font-medium">粗利</th>
           </tr>
         </thead>
         <tbody>
-          {data.map(r => (
-            <tr key={r.project_id} className="border-b last:border-0 hover:bg-muted/30">
+          {data.map((r, i) => (
+            <tr key={r.project_id} className={`border-b last:border-0 hover:bg-blue-50 transition-colors ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
               <td className="py-2 pr-3">{r.site_name}</td>
               <td className="py-2 pr-3 text-right">{formatYenFull(r.sales)}</td>
               <td className="py-2 pr-3 text-right">{formatYenFull(r.costs)}</td>

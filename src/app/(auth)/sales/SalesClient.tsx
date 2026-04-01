@@ -64,7 +64,7 @@ export function SalesClient({ sales, projects }: Props) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">💵 売上・入金管理</h1>
+      <h1 className="text-2xl font-bold text-slate-900">売上・入金管理</h1>
 
       <Tabs defaultValue="unpaid">
         <TabsList>
@@ -83,19 +83,19 @@ export function SalesClient({ sales, projects }: Props) {
                   <div className="overflow-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2 pr-3 font-medium text-muted-foreground">請求日</th>
-                          <th className="text-left py-2 pr-3 font-medium text-muted-foreground">現場名</th>
-                          <th className="text-left py-2 pr-3 font-medium text-muted-foreground">名称</th>
-                          <th className="text-right py-2 pr-3 font-medium text-muted-foreground">金額</th>
-                          <th className="text-left py-2 font-medium text-muted-foreground">入金予定日</th>
+                        <tr className="bg-slate-800 text-white">
+                          <th className="text-left py-2.5 px-3 font-medium">請求日</th>
+                          <th className="text-left py-2.5 px-3 font-medium">現場名</th>
+                          <th className="text-left py-2.5 px-3 font-medium">名称</th>
+                          <th className="text-right py-2.5 px-3 font-medium">金額</th>
+                          <th className="text-left py-2.5 px-3 font-medium">入金予定日</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {unpaid.map(s => (
+                        {unpaid.map((s, i) => (
                           <tr
                             key={s.sales_id}
-                            className={`border-b last:border-0 cursor-pointer hover:bg-muted/30 transition-colors ${selectedId === s.sales_id ? 'bg-primary/5' : ''}`}
+                            className={`border-b last:border-0 cursor-pointer transition-colors ${selectedId === s.sales_id ? 'bg-blue-50' : i % 2 === 1 ? 'bg-slate-50 hover:bg-blue-50' : 'bg-white hover:bg-blue-50'}`}
                             onClick={() => {
                               setSelectedId(s.sales_id)
                               setDepositAmount(String(s.amount).replace(/,/g, ''))
@@ -150,17 +150,17 @@ export function SalesClient({ sales, projects }: Props) {
               <div className="overflow-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">請求日</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">現場名</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">名称</th>
-                      <th className="text-right py-2 pr-3 font-medium text-muted-foreground">金額</th>
-                      <th className="text-left py-2 font-medium text-muted-foreground">入金日</th>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="text-left py-2.5 px-3 font-medium">請求日</th>
+                      <th className="text-left py-2.5 px-3 font-medium">現場名</th>
+                      <th className="text-left py-2.5 px-3 font-medium">名称</th>
+                      <th className="text-right py-2.5 px-3 font-medium">金額</th>
+                      <th className="text-left py-2.5 px-3 font-medium">入金日</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paid.map(s => (
-                      <tr key={s.sales_id} className="border-b last:border-0">
+                    {paid.map((s, i) => (
+                      <tr key={s.sales_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 pr-3">{s.billing_date?.slice(0, 7)}</td>
                         <td className="py-2 pr-3">{projectMap[s.project_id] ?? '(不明)'}</td>
                         <td className="py-2 pr-3">{s.remarks}</td>

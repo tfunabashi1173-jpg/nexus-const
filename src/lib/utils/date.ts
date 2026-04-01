@@ -52,6 +52,13 @@ export function getFiscalYear(date: Date, startMonth: number = 4): number {
 }
 
 /**
+ * Date → 'YYYY-MM-DD' (ローカル日付。toISOString は UTC 変換で JST 環境だと日付がズレるため使用不可)
+ */
+export function formatDateLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
  * 会計年度の開始日・終了日
  */
 export function getFiscalYearRange(

@@ -49,7 +49,7 @@ BEGIN
     ORDER BY COALESCE(s.sales, 0) DESC
   ),
   months AS (
-    SELECT generate_series(p_fy_start, p_fy_end, '1 month'::interval)::date AS month_date
+    SELECT generate_series(p_fy_start::timestamp, p_fy_end::timestamp, '1 month'::interval)::date AS month_date
   ),
   sales_by_month AS (
     SELECT date_trunc('month', billing_date::date)::date AS month_date, SUM(amount) AS sales

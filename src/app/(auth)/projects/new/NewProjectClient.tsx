@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Partner, User } from '@/types'
-import { calcScheduledDate } from '@/lib/utils/date'
+import { calcScheduledDate, formatDateLocal } from '@/lib/utils/date'
 import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -67,7 +67,7 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
           status,
           contract_amount: amountNum,
           scheduled_deposit_date: scheduledDepositDate
-            ? scheduledDepositDate.toISOString().split('T')[0]
+            ? formatDateLocal(scheduledDepositDate)
             : null,
           manager_id: managerId,
           customer_id: customerId,
@@ -165,7 +165,7 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
 
           {scheduledDepositDate && (
             <p className="text-sm text-muted-foreground bg-muted rounded p-2">
-              📅 入金予定日（自動計算）: <strong>{scheduledDepositDate.toISOString().split('T')[0]}</strong>
+              📅 入金予定日（自動計算）: <strong>{formatDateLocal(scheduledDepositDate)}</strong>
             </p>
           )}
 

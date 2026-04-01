@@ -376,27 +376,33 @@ export function CostsClient({ costs, vendors, projects }: Props) {
           <Card>
             <CardContent className="pt-4">
               <div className="overflow-auto max-h-[600px]">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-background">
-                    <tr className="border-b">
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">請求月</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">業者</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">現場</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">金額</th>
+                <table className="w-full text-sm table-fixed">
+                  <colgroup>
+                    <col className="w-[13%]" />
+                    <col className="w-[27%]" />
+                    <col className="w-[38%]" />
+                    <col className="w-[22%]" />
+                  </colgroup>
+                  <thead className="sticky top-0">
+                    <tr className="bg-slate-800 text-white">
+                      <th className="text-left py-2.5 px-3 font-medium">請求月</th>
+                      <th className="text-left py-2.5 px-3 font-medium">業者</th>
+                      <th className="text-left py-2.5 px-3 font-medium">現場</th>
+                      <th className="text-right py-2.5 px-3 font-medium">金額</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {costs.map(c => (
-                      <tr key={c.cost_id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2 pr-3">{c.billing_month?.slice(0, 7)}</td>
-                        <td className="py-2 pr-3">{vendorMap[c.vendor_id] ?? '(不明)'}</td>
-                        <td className="py-2 pr-3 text-muted-foreground">
+                    {costs.map((c, i) => (
+                      <tr key={c.cost_id} className={`border-b last:border-0 hover:bg-blue-50 transition-colors ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                        <td className="py-2 px-3">{c.billing_month?.slice(0, 7)}</td>
+                        <td className="py-2 px-3 truncate">{normalizeCompanyName(vendorMap[c.vendor_id] ?? '(不明)')}</td>
+                        <td className="py-2 px-3 truncate text-muted-foreground">
                           {c.project_id
                             ? projects.find(p => p.project_id === c.project_id)?.site_name ?? '(不明)'
                             : <Badge variant="destructive" className="text-xs">現場不明</Badge>
                           }
                         </td>
-                        <td className="py-2 text-right">{formatYenFull(c.amount)}</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap">{formatYenFull(c.amount)}</td>
                       </tr>
                     ))}
                     {costs.length === 0 && (

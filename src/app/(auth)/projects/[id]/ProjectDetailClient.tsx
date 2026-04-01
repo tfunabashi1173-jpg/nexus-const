@@ -155,32 +155,39 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
   }
 
   return (
-    <div className="space-y-6">
-      {/* ヘッダー */}
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground font-mono">{project.project_id}</p>
-          <h1 className="text-2xl font-bold">{project.site_name}</h1>
+    <div className="space-y-5">
+      {/* ヘッダー帯 */}
+      <div className="bg-white rounded-xl shadow-sm p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <p className="text-xs text-slate-400 font-mono mb-1">{project.project_id}</p>
+            <h1 className="text-2xl font-bold text-slate-900">{project.site_name}</h1>
+          </div>
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+            project.status === '受注' ? 'bg-blue-100 text-blue-700' :
+            project.status === '着工中' ? 'bg-amber-100 text-amber-700' :
+            project.status === '完工' ? 'bg-emerald-100 text-emerald-700' :
+            'bg-slate-100 text-slate-600'
+          }`}>{project.status}</span>
         </div>
-        <Badge variant={project.status === '入金済' ? 'secondary' : 'default'}>{project.status}</Badge>
-      </div>
 
-      {/* KPI */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="契約金額（追加含む）" value={formatYenFull(totalContract)} />
-        <KpiCard label="請求済売上" value={formatYenFull(salesSum)} />
-        <KpiCard label="原価合計" value={formatYenFull(costsSum)} />
-        <KpiCard label="予想粗利" value={formatYenFull(profit)} highlight={profit >= 0} />
-      </div>
-
-      {/* 進捗バー */}
-      <div className="space-y-1">
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>請求進捗</span>
-          <span>{(progress * 100).toFixed(1)}%</span>
+        {/* KPI */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <KpiCard label="契約金額（追加含む）" value={formatYenFull(totalContract)} />
+          <KpiCard label="請求済売上" value={formatYenFull(salesSum)} />
+          <KpiCard label="原価合計" value={formatYenFull(costsSum)} />
+          <KpiCard label="予想粗利" value={formatYenFull(profit)} highlight={profit >= 0} />
         </div>
-        <div className="h-2 bg-muted rounded-full overflow-hidden">
-          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min(progress * 100, 100)}%` }} />
+
+        {/* 進捗バー */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-slate-500">
+            <span className="font-medium">請求進捗</span>
+            <span className="font-semibold tabular-nums">{(progress * 100).toFixed(1)}%</span>
+          </div>
+          <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.min(progress * 100, 100)}%` }} />
+          </div>
         </div>
       </div>
 
@@ -213,15 +220,15 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
               {addons.length > 0 && (
                 <table className="w-full text-sm mb-4">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">日付</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">内容</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">金額</th>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="text-left py-2.5 px-3 font-medium">日付</th>
+                      <th className="text-left py-2.5 px-3 font-medium">内容</th>
+                      <th className="text-right py-2.5 px-3 font-medium">金額</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {addons.map(a => (
-                      <tr key={a.addon_id} className="border-b last:border-0">
+                    {addons.map((a, i) => (
+                      <tr key={a.addon_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 pr-3">{a.request_date}</td>
                         <td className="py-2 pr-3">{a.description}</td>
                         <td className="py-2 text-right">{formatYenFull(a.amount)}</td>
@@ -259,16 +266,16 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
               {sales.length > 0 && (
                 <table className="w-full text-sm mb-4">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">請求日</th>
-                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">名称</th>
-                      <th className="text-right py-2 pr-3 font-medium text-muted-foreground">金額</th>
-                      <th className="text-center py-2 font-medium text-muted-foreground">状態</th>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="text-left py-2.5 px-3 font-medium">請求日</th>
+                      <th className="text-left py-2.5 px-3 font-medium">名称</th>
+                      <th className="text-right py-2.5 px-3 font-medium">金額</th>
+                      <th className="text-center py-2.5 px-3 font-medium">状態</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sales.map(s => (
-                      <tr key={s.sales_id} className="border-b last:border-0">
+                    {sales.map((s, i) => (
+                      <tr key={s.sales_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 pr-3">{s.billing_date}</td>
                         <td className="py-2 pr-3">{s.remarks}</td>
                         <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
@@ -656,11 +663,9 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
 
 function KpiCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <Card>
-      <CardContent className="pt-4 pb-3">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={`text-lg font-bold mt-1 ${highlight === false ? 'text-red-600' : highlight ? 'text-green-600' : ''}`}>{value}</p>
-      </CardContent>
-    </Card>
+    <div className="bg-slate-50 rounded-lg px-4 py-3 border border-slate-100">
+      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</p>
+      <p className={`text-xl font-bold mt-1 tabular-nums ${highlight === false ? 'text-red-600' : highlight ? 'text-emerald-600' : 'text-slate-800'}`}>{value}</p>
+    </div>
   )
 }

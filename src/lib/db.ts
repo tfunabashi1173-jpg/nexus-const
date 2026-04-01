@@ -1,5 +1,6 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { Project, Partner, Sale, Cost, Addon, User, DashboardSummary, RevenueSummary, MonthlyRevenue } from '@/types'
+import { formatDateLocal } from '@/lib/utils/date'
 import { unstable_cache } from 'next/cache'
 import { perfStart } from '@/lib/perf'
 
@@ -359,7 +360,7 @@ export async function getEvidenceSignedUrl(filePath: string): Promise<string | n
 // Auto Status Update
 // ==========================================
 export async function autoUpdateStatuses(): Promise<{ updated: boolean; message: string }> {
-  const today = new Date().toISOString().split('T')[0]
+  const today = formatDateLocal(new Date())
   let count = 0
 
   // 受注 → 着工中
@@ -439,8 +440,8 @@ export async function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<D
   const end = perfStart('getDashboardSummary')
   const { data, error } = await supabase()
     .rpc('get_dashboard_summary', {
-      p_fy_start: fyStart.toISOString().split('T')[0],
-      p_fy_end:   fyEnd.toISOString().split('T')[0],
+      p_fy_start: formatDateLocal(fyStart),
+      p_fy_end:   formatDateLocal(fyEnd),
     })
   end()
   if (error || !data) {
@@ -461,14 +462,67 @@ export async function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<D
 
 export async function getRevenueSummary(fyStart: Date, fyEnd: Date): Promise<RevenueSummary> {
   const end = perfStart('getRevenueSummary')
+  const fyStartStr = formatDateLocal(fyStart)
+  const fyEndStr   = formatDateLocal(fyEnd)
   const { data, error } = await supabase()
     .rpc('get_revenue_summary', {
-      p_fy_start: fyStart.toISOString().split('T')[0],
-      p_fy_end:   fyEnd.toISOString().split('T')[0],
+      p_fy_start: fyStartStr,
+      p_fy_end:   fyEndStr,
     })
   end()
   if (error || !data) return { annual: [], monthly_trend: [], vendor_ranking: [] }
-  return data as RevenueSummary
+
+  const result = data as RevenueSummary
+
+  // RPC が monthly_trend を返さない古いバージョンの場合、JS 側でフォールバック計算
+  if (!result.monthly_trend || result.monthly_trend.length === 0) {
+    const [salesRes, costsRes] = await Promise.all([
+      supabase()
+        .from('sales')
+        .select('billing_date, amount')
+        .gte('billing_date', fyStartStr)
+        .lte('billing_date', fyEndStr),
+      supabase()
+        .from('costs')
+        .select('billing_month, amount')
+        .not('project_id', 'is', null)
+        .gte('billing_month', fyStartStr)
+        .lte('billing_month', fyEndStr),
+    ])
+
+    // 月ごとに集計
+    const salesByMonth: Record<string, number> = {}
+    for (const row of (salesRes.data ?? [])) {
+      const m = (row.billing_date as string).slice(0, 7)
+      salesByMonth[m] = (salesByMonth[m] ?? 0) + (row.amount as number)
+    }
+    const costsByMonth: Record<string, number> = {}
+    for (const row of (costsRes.data ?? [])) {
+      const m = (row.billing_month as string).slice(0, 7)
+      costsByMonth[m] = (costsByMonth[m] ?? 0) + (row.amount as number)
+    }
+
+    // fyStart〜fyEnd の全月を生成（文字列比較で確実に範囲内に収める）
+    const months: { month: string; sales: number; costs: number }[] = []
+    const endKey = fyEndStr.slice(0, 7) // 'YYYY-MM'
+    const cur = new Date(Date.UTC(
+      parseInt(fyStartStr.slice(0, 4)),
+      parseInt(fyStartStr.slice(5, 7)) - 1,
+      1
+    ))
+    for (let i = 0; i < 24; i++) { // 最大24ヶ月でガード
+      const y = cur.getUTCFullYear()
+      const m = cur.getUTCMonth() + 1
+      const key = `${y}-${String(m).padStart(2, '0')}`
+      if (key > endKey) break
+      months.push({ month: key, sales: salesByMonth[key] ?? 0, costs: costsByMonth[key] ?? 0 })
+      cur.setUTCMonth(cur.getUTCMonth() + 1)
+    }
+
+    result.monthly_trend = months
+  }
+
+  return result
 }
 
 export async function getMonthlyRevenue(month: string): Promise<MonthlyRevenue> {
