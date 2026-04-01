@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifySession } from '@/lib/auth'
+import { jwtVerify } from 'jose'
 
 const PUBLIC_PATHS = ['/login']
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'fallback-secret-change-in-production'
+)
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isPublic = PUBLIC_PATHS.some(p => pathname.startsWith(p))
 
@@ -14,7 +17,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  const user = await verifySession(token)
+  let user: { user_id: string; username: string; role: string } | null = null
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    user = { user_id: payload.user_id as string, username: payload.username as string, role: payload.role as string }
+  } catch { user = null }
+
   if (!user) {
     if (isPublic) return NextResponse.next()
     const response = NextResponse.redirect(new URL('/login', request.url))

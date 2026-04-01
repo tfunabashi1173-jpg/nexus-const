@@ -200,7 +200,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
               {costs.length === 0 ? (
                 <p className="text-sm text-muted-foreground">原価データがありません</p>
               ) : (
-                <CostPivotTable costs={costs} partnerMap={partnerMap} projectId={project.project_id} />
+                <CostPivotTable costs={costs} partnerMap={partnerMap} partners={partners} projectId={project.project_id} />
               )}
             </CardContent>
           </Card>
@@ -327,8 +327,8 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                 <div className="space-y-1.5">
                   <Label>得意先</Label>
                   <Select value={customerId} onValueChange={(v) => setCustomerId(v ?? "")}>
-                    <SelectTrigger><SelectValue>{partnerMap[customerId] ?? customerId}</SelectValue></SelectTrigger>
-                    <SelectContent>{customers.map(c => <SelectItem key={c.partner_id} value={c.partner_id}>{c.name}</SelectItem>)}</SelectContent>
+                    <SelectTrigger><SelectValue>{normalizeCompanyName(partnerMap[customerId] ?? customerId)}</SelectValue></SelectTrigger>
+                    <SelectContent>{customers.map(c => <SelectItem key={c.partner_id} value={c.partner_id}>{normalizeCompanyName(c.name)}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
@@ -388,7 +388,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
 
 const fmtAmt = (v: number) => Math.round(v).toLocaleString()
 
-function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partnerMap: Record<string, string>; projectId: string }) {
+function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cost[]; partnerMap: Record<string, string>; partners: Partner[]; projectId: string }) {
   const router = useRouter()
   const [dialog, setDialog] = useState<{ vendor_id: string; month: string } | null>(null)
   const [editAmounts, setEditAmounts] = useState<Record<string, string>>({})
@@ -403,10 +403,16 @@ function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partn
   const [monthInput, setMonthInput] = useState('')
   const months = [...new Set([...dbMonths, ...extraMonths])].sort()
 
-  // 業者一覧（合計降順）
+  // 業者一覧（合計降順）＋ユーザーが追加した業者
   const vendorTotals: Record<string, number> = {}
   costs.forEach(c => { vendorTotals[c.vendor_id] = (vendorTotals[c.vendor_id] ?? 0) + c.amount })
-  const vendors = Object.keys(vendorTotals).sort((a, b) => vendorTotals[b] - vendorTotals[a])
+  const dbVendors = Object.keys(vendorTotals).sort((a, b) => vendorTotals[b] - vendorTotals[a])
+  const [extraVendors, setExtraVendors] = useState<string[]>([])
+  const [addingVendor, setAddingVendor] = useState(false)
+  const [selectedVendorId, setSelectedVendorId] = useState('')
+  const vendors = [...new Set([...dbVendors, ...extraVendors])]
+
+  const vendorOptions = partners.filter(p => p.category !== '得意先' && !vendors.includes(p.partner_id))
 
   // ピボット: [vendor_id][month] = Cost[]
   const pivot: Record<string, Record<string, Cost[]>> = {}
@@ -470,6 +476,7 @@ function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partn
       toast.success('登録しました')
       setNewAmount('')
       setExtraMonths(prev => prev.filter(m => m !== dialog.month))
+      setExtraVendors(prev => prev.filter(v => v !== dialog.vendor_id))
       router.refresh()
       setDialog(null)
     } else toast.error('登録に失敗しました')
@@ -481,6 +488,13 @@ function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partn
     if (!months.includes(m)) setExtraMonths(prev => [...prev, m])
     setAddingMonth(false)
     setMonthInput('')
+  }
+
+  function addVendorRow() {
+    if (!selectedVendorId) return
+    if (!vendors.includes(selectedVendorId)) setExtraVendors(prev => [...prev, selectedVendorId])
+    setAddingVendor(false)
+    setSelectedVendorId('')
   }
 
   return (
@@ -536,28 +550,56 @@ function CostPivotTable({ costs, partnerMap, projectId }: { costs: Cost[]; partn
           </tbody>
         </table>
       </div>
-      <div className="mt-2 flex items-center gap-2 justify-end">
-        {addingMonth ? (
-          <>
-            <input
-              type="month"
-              className="border rounded px-2 py-1 text-sm"
-              value={monthInput}
-              onChange={e => setMonthInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') addMonthColumn(); if (e.key === 'Escape') setAddingMonth(false) }}
-              autoFocus
-            />
-            <button onClick={addMonthColumn} className="text-sm text-blue-600 font-medium hover:underline">追加</button>
-            <button onClick={() => setAddingMonth(false)} className="text-sm text-muted-foreground hover:text-foreground">キャンセル</button>
-          </>
-        ) : (
-          <button
-            onClick={() => setAddingMonth(true)}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-          >
-            <span className="text-base font-bold leading-none">+</span> 月を追加
-          </button>
-        )}
+      <div className="mt-2 flex items-center gap-2 justify-between">
+        <div className="flex items-center gap-2">
+          {addingVendor ? (
+            <>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={selectedVendorId}
+                onChange={e => setSelectedVendorId(e.target.value)}
+                autoFocus
+              >
+                <option value="">業者を選択</option>
+                {vendorOptions.map(p => (
+                  <option key={p.partner_id} value={p.partner_id}>{normalizeCompanyName(p.name)}</option>
+                ))}
+              </select>
+              <button onClick={addVendorRow} className="text-sm text-blue-600 font-medium hover:underline">追加</button>
+              <button onClick={() => { setAddingVendor(false); setSelectedVendorId('') }} className="text-sm text-muted-foreground hover:text-foreground">キャンセル</button>
+            </>
+          ) : (
+            <button
+              onClick={() => setAddingVendor(true)}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+            >
+              <span className="text-base font-bold leading-none">+</span> 業者を追加
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {addingMonth ? (
+            <>
+              <input
+                type="month"
+                className="border rounded px-2 py-1 text-sm"
+                value={monthInput}
+                onChange={e => setMonthInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addMonthColumn(); if (e.key === 'Escape') setAddingMonth(false) }}
+                autoFocus
+              />
+              <button onClick={addMonthColumn} className="text-sm text-blue-600 font-medium hover:underline">追加</button>
+              <button onClick={() => setAddingMonth(false)} className="text-sm text-muted-foreground hover:text-foreground">キャンセル</button>
+            </>
+          ) : (
+            <button
+              onClick={() => setAddingMonth(true)}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+            >
+              <span className="text-base font-bold leading-none">+</span> 月を追加
+            </button>
+          )}
+        </div>
       </div>
 
       <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null) }}>

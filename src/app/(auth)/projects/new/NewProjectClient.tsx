@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Partner, User } from '@/types'
 import { calcScheduledDate } from '@/lib/utils/date'
+import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -122,7 +123,7 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
               <Select value={customerId} onValueChange={(v) => setCustomerId(v ?? "")}>
                 <SelectTrigger><SelectValue placeholder="得意先を選択" /></SelectTrigger>
                 <SelectContent>
-                  {customers.map(c => <SelectItem key={c.partner_id} value={c.partner_id}>{c.name}</SelectItem>)}
+                  {customers.map(c => <SelectItem key={c.partner_id} value={c.partner_id}>{normalizeCompanyName(c.name)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

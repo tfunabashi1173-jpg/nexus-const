@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AmountInput } from '@/components/ui/amount-input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -97,7 +98,7 @@ export function SalesClient({ sales, projects }: Props) {
                             className={`border-b last:border-0 cursor-pointer hover:bg-muted/30 transition-colors ${selectedId === s.sales_id ? 'bg-primary/5' : ''}`}
                             onClick={() => {
                               setSelectedId(s.sales_id)
-                              setDepositAmount(String(s.amount))
+                              setDepositAmount(String(s.amount).replace(/,/g, ''))
                             }}
                           >
                             <td className="py-2 pr-3">{s.billing_date?.slice(0, 7)}</td>
@@ -123,11 +124,9 @@ export function SalesClient({ sales, projects }: Props) {
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">入金金額（税抜）</Label>
-                          <Input
-                            type="text"
-                            inputMode="numeric"
+                          <AmountInput
                             value={depositAmount}
-                            onChange={e => setDepositAmount(e.target.value)}
+                            onChange={setDepositAmount}
                           />
                           <p className="text-xs text-muted-foreground">請求額と異なる場合は差額が残ります</p>
                         </div>

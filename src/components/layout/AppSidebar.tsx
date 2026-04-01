@@ -103,7 +103,9 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <div className="space-y-0.5">
               {section.items.map((item) => {
                 const Icon = item.icon
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                const isActive = pathname === item.href ||
+                  (pathname.startsWith(item.href + '/') &&
+                    !section.items.some(other => other.href !== item.href && pathname.startsWith(other.href)))
                 return (
                   <Link
                     key={item.href}
