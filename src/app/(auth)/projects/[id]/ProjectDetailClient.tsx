@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { Project, Cost, Sale, Addon, Partner, User } from '@/types'
+import { useState, useTransition, useMemo } from 'react'
+import { Project, Cost, Sale, Addon, Partner, User, ProjectSubManager } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
 import { AmountInput } from '@/components/ui/amount-input'
 import { normalizeCompanyName } from '@/lib/utils/text'
@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Trash2, Save, ExternalLink, X } from 'lucide-react'
+import { Trash2, Save, ExternalLink, X, Plus } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 
 interface Props {
@@ -24,12 +24,13 @@ interface Props {
   addons: Addon[]
   partners: Partner[]
   users: User[]
+  subManagers: ProjectSubManager[]
 }
 
 const STATUS_OPTIONS = ['受注', '着工中', '完工', '入金済']
 const STRUCTURES = ['RC造', 'S造', '木造', 'SRC造', '軽量鉄骨造', 'その他']
 
-export function ProjectDetailClient({ project, costs, sales, addons, partners, users }: Props) {
+export function ProjectDetailClient({ project, costs, sales, addons, partners, users, subManagers: initialSubManagers }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -45,6 +46,49 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
   const [endDate, setEndDate] = useState(project.end_date ?? '')
   const [contractAmount, setContractAmount] = useState(String(project.contract_amount ?? 0))
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // サブ担当
+  const today = new Date().toISOString().split('T')[0]
+  const [subManagers, setSubManagers] = useState<ProjectSubManager[]>(initialSubManagers)
+  const [subManagerId, setSubManagerId] = useState('')
+  const [subStartDate, setSubStartDate] = useState(today)
+  const [subEndDate, setSubEndDate] = useState('')
+
+  function addSubManager() {
+    if (!subManagerId || !subStartDate) { toast.error('担当者と開始日を入力してください'); return }
+    startTransition(async () => {
+      const res = await fetch(`/api/projects/${project.project_id}/sub-managers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_id: subManagerId, start_date: subStartDate, end_date: subEndDate || null }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const user = users.find(u => u.user_id === subManagerId)
+        setSubManagers(prev => [...prev, { ...data, username: user?.username ?? subManagerId }])
+        setSubManagerId(''); setSubStartDate(today); setSubEndDate('')
+        toast.success('サブ担当を追加しました')
+      } else {
+        toast.error('追加に失敗しました')
+      }
+    })
+  }
+
+  function removeSubManager(id: string) {
+    startTransition(async () => {
+      const res = await fetch(`/api/projects/${project.project_id}/sub-managers`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) {
+        setSubManagers(prev => prev.filter(s => s.id !== id))
+        toast.success('削除しました')
+      } else {
+        toast.error('削除に失敗しました')
+      }
+    })
+  }
 
   // 追加工事フォーム
   const [addonDate, setAddonDate] = useState('')
@@ -66,6 +110,32 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
   const costsSum = costs.reduce((s, r) => s + r.amount, 0)
   const profit = salesSum - costsSum
   const progress = totalContract > 0 ? salesSum / totalContract : 0
+
+  // 担当者別の按分売上・粗利（サブ担当がいる場合のみ意味を持つ）
+  const personAllocations = useMemo(() => {
+    const totals: Record<string, number> = {}
+    for (const sale of sales) {
+      const d = sale.billing_date
+      const activeSubs = subManagers.filter(sm =>
+        sm.start_date <= d && (sm.end_date === null || sm.end_date >= d)
+      )
+      const divisor = 1 + activeSubs.length
+      const share = Math.round(sale.amount / divisor)
+      totals[project.manager_id] = (totals[project.manager_id] ?? 0) + share
+      for (const sm of activeSubs) {
+        totals[sm.manager_id] = (totals[sm.manager_id] ?? 0) + share
+      }
+    }
+    // 原価を売上按分比率で分配（salesSum=0 の場合は原価を主担当に全額）
+    const profitRatio = salesSum > 0 ? profit / salesSum : 0
+    return Object.entries(totals).map(([uid, allocatedSales]) => ({
+      user_id: uid,
+      name: userMap[uid] ?? uid,
+      isMain: uid === project.manager_id,
+      allocatedSales,
+      profit: salesSum > 0 ? Math.round(allocatedSales * profitRatio) : (uid === project.manager_id ? -costsSum : 0),
+    })).sort((a, b) => (a.isMain ? -1 : 1) - (b.isMain ? -1 : 1))
+  }, [sales, subManagers, project.manager_id, costsSum, userMap])
 
   function saveBasicInfo() {
     startTransition(async () => {
@@ -189,6 +259,38 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
             <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.min(progress * 100, 100)}%` }} />
           </div>
         </div>
+
+        {/* 担当者別按分（サブ担当がいる場合のみ） */}
+        {subManagers.length > 0 && (
+          <div className="mt-4 border-t pt-4">
+            <p className="text-xs font-medium text-slate-500 mb-2">担当者別 按分売上・粗利</p>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-600">
+                    <th className="text-left py-1.5 px-3 font-medium text-xs">担当者</th>
+                    <th className="text-right py-1.5 px-3 font-medium text-xs">按分売上</th>
+                    <th className="text-right py-1.5 px-3 font-medium text-xs">按分粗利</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {personAllocations.map(p => (
+                    <tr key={p.user_id} className="border-b last:border-0">
+                      <td className="py-1.5 px-3 text-sm">
+                        {p.name}
+                        {p.isMain && <span className="ml-1.5 text-xs text-slate-400">（主）</span>}
+                      </td>
+                      <td className="py-1.5 px-3 text-right tabular-nums text-sm">{formatYenFull(p.allocatedSales)}</td>
+                      <td className={`py-1.5 px-3 text-right tabular-nums text-sm font-medium ${p.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {formatYenFull(p.profit)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* タブ */}
@@ -343,11 +445,73 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                   <Input value={customerContact} onChange={e => setCustomerContact(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>担当者</Label>
+                  <Label>担当者（主）</Label>
                   <Select value={managerId} onValueChange={(v) => setManagerId(v ?? "")}>
                     <SelectTrigger><SelectValue>{userMap[managerId] ?? managerId}</SelectValue></SelectTrigger>
                     <SelectContent>{users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>)}</SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label>サブ担当</Label>
+                  <div className="border rounded-md p-3 space-y-2 bg-slate-50">
+                    {subManagers.length > 0 && (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-muted-foreground border-b">
+                            <th className="text-left py-1 font-medium">担当者</th>
+                            <th className="text-left py-1 font-medium">開始日</th>
+                            <th className="text-left py-1 font-medium">終了日</th>
+                            <th className="w-8"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {subManagers.map(s => (
+                            <tr key={s.id} className="border-b last:border-0">
+                              <td className="py-1.5 pr-2 text-sm">{s.username}</td>
+                              <td className="py-1.5 pr-2 text-sm tabular-nums">{s.start_date}</td>
+                              <td className="py-1.5 pr-2 text-sm tabular-nums text-muted-foreground">{s.end_date ?? '（現在まで）'}</td>
+                              <td className="py-1.5">
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeSubManager(s.id)} disabled={isPending}>
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 pt-1">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">担当者</p>
+                        <Select value={subManagerId} onValueChange={v => setSubManagerId(v ?? '')}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <span className={subManagerId ? '' : 'text-muted-foreground'}>
+                              {subManagerId ? (userMap[subManagerId] ?? subManagerId) : '選択'}
+                            </span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {users.filter(u => u.user_id !== managerId).map(u => (
+                              <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">開始日</p>
+                        <Input type="date" value={subStartDate} onChange={e => setSubStartDate(e.target.value)} className="h-8 text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">終了日（空欄=現在まで）</p>
+                        <Input type="date" value={subEndDate} onChange={e => setSubEndDate(e.target.value)} className="h-8 text-xs" />
+                      </div>
+                      <div className="flex items-end">
+                        <Button size="sm" className="h-8 gap-1.5" onClick={addSubManager} disabled={isPending}>
+                          <Plus className="h-3.5 w-3.5" />追加
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">※ サブ担当の実働期間中の売上は主担当と均等按分されます</p>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label>建物構造</Label>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { use, useMemo, useState, useEffect, Suspense } from 'react'
 import { Project, Addon, Partner, DashboardSummary } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYen, formatYenFull } from '@/lib/utils/date'
 import { normalizeCompanyName } from '@/lib/utils/text'
@@ -22,30 +22,26 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { AlertTriangle } from 'lucide-react'
-import { format } from 'date-fns'
 import Link from 'next/link'
 
 interface Props {
   projects: Project[]
   addons: Addon[]
   partners: Partner[]
-  initialSummary: DashboardSummary
+  summaryPromise: Promise<DashboardSummary>
   fiscalStartMonth: number
 }
 
-export function DashboardClient({ projects, addons, partners, initialSummary, fiscalStartMonth }: Props) {
+export function DashboardClient({ projects, addons, partners, summaryPromise, fiscalStartMonth }: Props) {
   const today = new Date()
   const currentFY = getFiscalYear(today, fiscalStartMonth)
   const [selectedFY, setSelectedFY] = useState(currentFY)
-  const [summary, setSummary] = useState<DashboardSummary>(initialSummary)
+  const [overrideSummary, setOverrideSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const { start: fyStart, end: fyEnd } = getFiscalYearRange(selectedFY, fiscalStartMonth)
-
-  // 年度変更時: APIから集計データを再取得
   useEffect(() => {
     if (selectedFY === currentFY) {
-      setSummary(initialSummary)
+      setOverrideSummary(null)
       return
     }
     const { start, end } = getFiscalYearRange(selectedFY, fiscalStartMonth)
@@ -54,14 +50,9 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
     setLoading(true)
     fetch(`/api/dashboard-summary?fy_start=${s}&fy_end=${e}`)
       .then(r => r.json())
-      .then(data => { setSummary(data); setLoading(false) })
+      .then(data => { setOverrideSummary(data); setLoading(false) })
       .catch(() => setLoading(false))
   }, [selectedFY]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const partnerMap = useMemo(
-    () => Object.fromEntries(partners.map(p => [p.partner_id, p.name])),
-    [partners]
-  )
 
   const addonMap = useMemo(() => {
     const map: Record<string, number> = {}
@@ -74,11 +65,171 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
     [projects]
   )
 
+  return (
+    <div className="space-y-6">
+      {/* ページヘッダー */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">経営状況</h1>
+        <div className="flex items-center gap-3 mt-2">
+          <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
+            <SelectTrigger className="w-auto min-w-36 bg-white">
+              <span className="mr-1">
+                {selectedFY}年度 ({selectedFY}/{fiscalStartMonth}〜{selectedFY + 1}/{fiscalStartMonth === 1 ? 12 : fiscalStartMonth - 1})
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {[currentFY, currentFY - 1, currentFY - 2].map(fy => (
+                <SelectItem key={fy} value={String(fy)}>{fy}年度</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {loading && <span className="text-sm text-slate-400 animate-pulse">読み込み中...</span>}
+        </div>
+      </div>
+
+      {/* アラート + KPI — Suspense でストリーミング（h1直下） */}
+      <Suspense fallback={<KpiSkeleton />}>
+        <KpiContent
+          summaryPromise={summaryPromise}
+          overrideSummary={overrideSummary}
+        />
+      </Suspense>
+
+      {/* 稼働現場 — 即時表示 */}
+      <Card className="bg-white shadow-sm border-0">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">🏗 稼働中現場</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {activeProjects.length === 0 ? (
+            <p className="text-sm text-muted-foreground">稼働中の現場はありません</p>
+          ) : (
+            <div className="overflow-auto max-h-64">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="text-left py-2.5 px-3 font-medium text-sm">現場名</th>
+                    <th className="text-left py-2.5 px-3 font-medium text-sm">工期</th>
+                    <th className="text-left py-2.5 px-3 font-medium text-sm">担当</th>
+                    <th className="text-right py-2.5 px-3 font-medium text-sm">金額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeProjects.map(p => {
+                    const base  = p.contract_amount ?? 0
+                    const addon = addonMap[p.project_id] ?? 0
+                    return (
+                      <tr key={p.project_id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
+                        <td className="py-2.5 px-3 font-medium">{p.site_name}</td>
+                        <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap text-xs">
+                          {p.start_date?.slice(0, 7)} 〜 {p.end_date?.slice(0, 7)}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500">{p.manager_name}</td>
+                        <td className="py-2.5 px-3 text-right font-medium tabular-nums">{formatYenFull(base + addon)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ランキング — Suspense でストリーミング */}
+      <Suspense fallback={<RankingSkeleton />}>
+        <RankingContent
+          summaryPromise={summaryPromise}
+          overrideSummary={overrideSummary}
+          partners={partners}
+        />
+      </Suspense>
+    </div>
+  )
+}
+
+// ---- KPI + アラート ----
+
+function KpiContent({
+  summaryPromise,
+  overrideSummary,
+}: {
+  summaryPromise: Promise<DashboardSummary>
+  overrideSummary: DashboardSummary | null
+}) {
+  const initialSummary = use(summaryPromise)
+  const summary = overrideSummary ?? initialSummary
+
   const totalSales  = summary.kpi.total_sales
   const totalCosts  = summary.kpi.total_costs
   const totalProfit = totalSales - totalCosts
+  const { alerts } = summary
+  const hasAlerts = alerts.unpaid_sales > 0 || alerts.orphaned_costs > 0 || alerts.unbilled_costs > 0
 
-  // DB側で計算済みのランキングをチャート用に整形
+  return (
+    <>
+      {hasAlerts && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="flex flex-wrap gap-3 mt-1">
+              {alerts.orphaned_costs > 0 && (
+                <Link href="/costs" className="underline underline-offset-2 hover:opacity-80">
+                  ⚠️ 現場不明原価: <strong>{alerts.orphaned_costs}件</strong> →確認・割り当て
+                </Link>
+              )}
+              {alerts.unpaid_sales > 0 && (
+                <Link href="/sales" className="underline underline-offset-2 hover:opacity-80">
+                  💰 未入金: <strong>{alerts.unpaid_sales}件</strong> →入金消込
+                </Link>
+              )}
+              {alerts.unbilled_costs > 0 && (
+                <Link href="/projects" className="underline underline-offset-2 hover:opacity-80">
+                  📋 未請求現場: <strong>{alerts.unbilled_costs}件</strong> →工事一覧
+                </Link>
+              )}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-blue-600 rounded-xl p-5 text-white shadow-sm">
+          <p className="text-sm font-medium text-blue-100">売上（請求済）</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalSales)}</p>
+        </div>
+        <div className="bg-slate-700 rounded-xl p-5 text-white shadow-sm">
+          <p className="text-sm font-medium text-slate-300">原価（発生済）</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalCosts)}</p>
+        </div>
+        <div className={`rounded-xl p-5 text-white shadow-sm ${totalProfit >= 0 ? 'bg-emerald-600' : 'bg-red-600'}`}>
+          <p className={`text-sm font-medium ${totalProfit >= 0 ? 'text-emerald-100' : 'text-red-100'}`}>粗利</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalProfit)}</p>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ---- ランキング ----
+
+function RankingContent({
+  summaryPromise,
+  overrideSummary,
+  partners,
+}: {
+  summaryPromise: Promise<DashboardSummary>
+  overrideSummary: DashboardSummary | null
+  partners: Partner[]
+}) {
+  const initialSummary = use(summaryPromise)
+  const summary = overrideSummary ?? initialSummary
+
+  const partnerMap = useMemo(
+    () => Object.fromEntries(partners.map(p => [p.partner_id, p.name])),
+    [partners]
+  )
+
   const staffSalesData = useMemo(() =>
     summary.staff_ranking.map((s, i) => ({
       name: i === 0 ? `🥇 ${s.name}` : i === 1 ? `🥈 ${s.name}` : i === 2 ? `🥉 ${s.name}` : s.name,
@@ -113,117 +264,8 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
     [summary.vendor_ranking, partnerMap]
   )
 
-  const { alerts } = summary
-  const hasAlerts = alerts.unpaid_sales > 0 || alerts.orphaned_costs > 0 || alerts.unbilled_costs > 0
-
   return (
-    <div className="space-y-6">
-      {/* ページヘッダー */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">経営状況</h1>
-        <div className="flex items-center gap-3 mt-2">
-          <Select value={String(selectedFY)} onValueChange={(v) => setSelectedFY(parseInt(v ?? '0'))}>
-            <SelectTrigger className="w-auto min-w-36 bg-white">
-              <span className="mr-1">
-                {selectedFY}年度 ({selectedFY}/{fiscalStartMonth}〜{selectedFY + 1}/{fiscalStartMonth === 1 ? 12 : fiscalStartMonth - 1})
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {[currentFY, currentFY - 1, currentFY - 2].map(fy => (
-                <SelectItem key={fy} value={String(fy)}>{fy}年度</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {loading && <span className="text-sm text-slate-400 animate-pulse">読み込み中...</span>}
-        </div>
-      </div>
-
-      {/* アラート */}
-      {hasAlerts && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            <div className="flex flex-wrap gap-3 mt-1">
-              {alerts.orphaned_costs > 0 && (
-                <Link href="/costs" className="underline underline-offset-2 hover:opacity-80">
-                  ⚠️ 現場不明原価: <strong>{alerts.orphaned_costs}件</strong> →確認・割り当て
-                </Link>
-              )}
-              {alerts.unpaid_sales > 0 && (
-                <Link href="/sales" className="underline underline-offset-2 hover:opacity-80">
-                  💰 未入金: <strong>{alerts.unpaid_sales}件</strong> →入金消込
-                </Link>
-              )}
-              {alerts.unbilled_costs > 0 && (
-                <Link href="/projects" className="underline underline-offset-2 hover:opacity-80">
-                  📋 未請求現場: <strong>{alerts.unbilled_costs}件</strong> →工事一覧
-                </Link>
-              )}
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* KPI 大カード */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-blue-600 rounded-xl p-5 text-white shadow-sm">
-          <p className="text-sm font-medium text-blue-100">売上（請求済）</p>
-          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalSales)}</p>
-        </div>
-        <div className="bg-slate-700 rounded-xl p-5 text-white shadow-sm">
-          <p className="text-sm font-medium text-slate-300">原価（発生済）</p>
-          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalCosts)}</p>
-        </div>
-        <div className={`rounded-xl p-5 text-white shadow-sm ${totalProfit >= 0 ? 'bg-emerald-600' : 'bg-red-600'}`}>
-          <p className={`text-sm font-medium ${totalProfit >= 0 ? 'text-emerald-100' : 'text-red-100'}`}>粗利</p>
-          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalProfit)}</p>
-        </div>
-      </div>
-
-      {/* 稼働現場 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-3 bg-white shadow-sm border-0">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">🏗 稼働中現場</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {activeProjects.length === 0 ? (
-              <p className="text-sm text-muted-foreground">稼働中の現場はありません</p>
-            ) : (
-              <div className="overflow-auto max-h-64">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-800 text-white">
-                      <th className="text-left py-2.5 px-3 font-medium text-sm">現場名</th>
-                      <th className="text-left py-2.5 px-3 font-medium text-sm">工期</th>
-                      <th className="text-left py-2.5 px-3 font-medium text-sm">担当</th>
-                      <th className="text-right py-2.5 px-3 font-medium text-sm">金額</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeProjects.map(p => {
-                      const base  = p.contract_amount ?? 0
-                      const addon = addonMap[p.project_id] ?? 0
-                      return (
-                        <tr key={p.project_id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
-                          <td className="py-2.5 px-3 font-medium">{p.site_name}</td>
-                          <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap text-xs">
-                            {p.start_date?.slice(0, 7)} 〜 {p.end_date?.slice(0, 7)}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500">{p.manager_name}</td>
-                          <td className="py-2.5 px-3 text-right font-medium tabular-nums">{formatYenFull(base + addon)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 社員別ランキング */}
+    <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="bg-white shadow-sm border-0">
           <CardHeader className="pb-2">
@@ -243,7 +285,6 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
         </Card>
       </div>
 
-      {/* 得意先・支払先 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="bg-white shadow-sm border-0">
           <CardHeader className="pb-2">
@@ -262,29 +303,42 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
           </CardContent>
         </Card>
       </div>
+    </>
+  )
+}
+
+// ---- スケルトン ----
+
+function KpiSkeleton() {
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="rounded-xl p-5 bg-slate-200 animate-pulse h-24" />
+      ))}
     </div>
   )
 }
 
-function KpiRow({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+function RankingSkeleton() {
   return (
-    <div className={`flex justify-between items-center py-2 border-b last:border-0 ${highlight ? 'font-bold' : ''}`}>
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={`text-sm ${highlight ? (value >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
-        {formatYen(value)}
-      </span>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="rounded-xl bg-slate-100 animate-pulse h-52" />
+      ))}
     </div>
   )
 }
+
+// ---- チャート ----
 
 function RankingChart({ data, color }: { data: { name: string; value: number }[]; color: string }) {
   if (!data.length) return <p className="text-sm text-muted-foreground">データなし</p>
 
-  const sorted    = [...data].sort((a, b) => b.value - a.value)
-  const height    = Math.max(200, sorted.length * 28)
+  const sorted     = [...data].sort((a, b) => b.value - a.value)
+  const height     = Math.max(200, sorted.length * 28)
   const maxNameLen = Math.max(...sorted.map(d => d.name.length))
   const yAxisWidth = Math.min(Math.max(maxNameLen * 12, 100), 240)
-  const gradId    = `grad-${color.replace('#', '')}`
+  const gradId     = `grad-${color.replace('#', '')}`
 
   return (
     <ResponsiveContainer width="100%" height={height}>

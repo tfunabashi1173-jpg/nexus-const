@@ -59,6 +59,15 @@ export interface Cost {
   deleted_at: string | null
 }
 
+export interface ProjectSubManager {
+  id: string
+  project_id: string
+  manager_id: string
+  start_date: string
+  end_date: string | null
+  username?: string
+}
+
 export interface Addon {
   addon_id: string
   project_id: string

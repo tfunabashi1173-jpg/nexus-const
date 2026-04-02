@@ -1,5 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { Project, Partner, Sale, Cost, Addon, User, DashboardSummary, RevenueSummary, MonthlyRevenue } from '@/types'
+import { Project, Partner, Sale, Cost, Addon, User, ProjectSubManager, DashboardSummary, RevenueSummary, MonthlyRevenue } from '@/types'
 import { formatDateLocal } from '@/lib/utils/date'
 import { unstable_cache, revalidateTag } from 'next/cache'
 import { perfStart } from '@/lib/perf'
@@ -245,6 +245,45 @@ export async function fetchCostsByProject(projectId: string): Promise<Cost[]> {
     .or(ACTIVE)
     .order('billing_month', { ascending: false })
   return data ?? []
+}
+
+// ==========================================
+// Project Sub Managers
+// ==========================================
+export async function fetchSubManagersByProject(projectId: string): Promise<ProjectSubManager[]> {
+  const { data } = await supabase()
+    .from('project_sub_managers')
+    .select('*, users(username)')
+    .eq('project_id', projectId)
+    .or(ACTIVE)
+    .order('start_date', { ascending: true })
+  if (!data) return []
+  return data.map((r: any) => ({ ...r, username: r.users?.username ?? r.manager_id }))
+}
+
+export async function createSubManager(sub: Omit<ProjectSubManager, 'username'>) {
+  const { data, error } = await supabase()
+    .from('project_sub_managers')
+    .insert(sub)
+    .select()
+    .single()
+  if (!error) {
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
+  return { data, error }
+}
+
+export async function deleteSubManager(id: string) {
+  const { error } = await supabase()
+    .from('project_sub_managers')
+    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .eq('id', id)
+  if (!error) {
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
+  return { error }
 }
 
 export async function createCost(cost: Omit<Cost, 'is_deleted' | 'deleted_at'>) {
@@ -539,7 +578,7 @@ export function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<Dashboa
   return unstable_cache(
     () => getDashboardSummaryImpl(s, e),
     ['dashboard-summary', s, e],
-    { tags: ['dashboard'], revalidate: 30 }
+    { tags: ['dashboard'], revalidate: 10 }
   )()
 }
 

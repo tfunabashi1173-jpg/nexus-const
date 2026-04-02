@@ -4,6 +4,8 @@ import { getFiscalYear, getFiscalYearRange } from '@/lib/utils/date'
 import { perfStart } from '@/lib/perf'
 import { DashboardClient } from './DashboardClient'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: '経営状況 | NEXUS',
   icons: { icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" },
@@ -17,11 +19,13 @@ export default async function DashboardPage() {
   const currentFY = getFiscalYear(new Date(), fiscalStartMonth)
   const { start: fyStart, end: fyEnd } = getFiscalYearRange(currentFY, fiscalStartMonth)
 
-  const [projects, addons, partners, summary] = await Promise.all([
-    fetchProjects(),          // 稼働中現場表示・追加工事金額用
-    fetchAllAddons(),         // 稼働中現場の追加工事金額用
-    fetchPartners(),          // キャッシュ済み。ランキング名前解決用
-    getDashboardSummary(fyStart, fyEnd), // KPI・ランキング・アラートをDB側で一括計算
+  // summaryPromise は await しない → Suspense でストリーミング
+  const summaryPromise = getDashboardSummary(fyStart, fyEnd)
+
+  const [projects, addons, partners] = await Promise.all([
+    fetchProjects(),   // 稼働中現場表示・追加工事金額用
+    fetchAllAddons(),  // 稼働中現場の追加工事金額用
+    fetchPartners(),   // キャッシュ済み。ランキング名前解決用
   ])
   end()
 
@@ -30,7 +34,7 @@ export default async function DashboardPage() {
       projects={projects}
       addons={addons}
       partners={partners}
-      initialSummary={summary}
+      summaryPromise={summaryPromise}
       fiscalStartMonth={fiscalStartMonth}
     />
   )

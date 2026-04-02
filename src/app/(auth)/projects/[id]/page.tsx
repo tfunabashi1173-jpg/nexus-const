@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { fetchProject, fetchCostsByProject, fetchSalesByProject, fetchAddonsByProject, fetchPartners, fetchUsers } from '@/lib/db'
+import { fetchProject, fetchCostsByProject, fetchSalesByProject, fetchAddonsByProject, fetchPartners, fetchUsers, fetchSubManagersByProject } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import { ProjectDetailClient } from './ProjectDetailClient'
 
@@ -10,13 +10,14 @@ export const metadata: Metadata = {
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const [project, costs, sales, addons, partners, users] = await Promise.all([
+  const [project, costs, sales, addons, partners, users, subManagers] = await Promise.all([
     fetchProject(id),
     fetchCostsByProject(id),
     fetchSalesByProject(id),
     fetchAddonsByProject(id),
     fetchPartners(),
     fetchUsers(),
+    fetchSubManagersByProject(id),
   ])
 
   if (!project) notFound()
@@ -29,6 +30,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       addons={addons}
       partners={partners}
       users={users}
+      subManagers={subManagers}
     />
   )
 }
