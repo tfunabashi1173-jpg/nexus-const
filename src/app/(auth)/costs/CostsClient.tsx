@@ -29,6 +29,7 @@ interface OcrResult {
   details: InvoiceDetail[]
   matched_vendor?: string
   matched_project?: string
+  possible_duplicate?: { billing_month: string; amount: number }
 }
 
 export function CostsClient({ costs, vendors, projects }: Props) {
@@ -156,10 +157,19 @@ export function CostsClient({ costs, vendors, projects }: Props) {
       const projectMatch = dominantSite ? findSimilarMatch(dominantSite, projectCandidates) : null
       if (projectMatch) setOcrProjectId(projectMatch.id)
 
+      // 重複登録チェック（同業者×同請求月が既に存在するか）
+      const billingMonth = data.date ? (data.date as string).slice(0, 7) : null
+      const duplicate = match && billingMonth
+        ? costs.find(c => c.vendor_id === match.id && c.billing_month?.slice(0, 7) === billingMonth)
+        : null
+
       setOcrResult({
         ...data,
         matched_vendor: match ? vendorMap[match.id] : undefined,
         matched_project: projectMatch ? projects.find(p => p.project_id === projectMatch.id)?.site_name : undefined,
+        possible_duplicate: duplicate
+          ? { billing_month: duplicate.billing_month?.slice(0, 7) ?? '', amount: duplicate.amount }
+          : undefined,
       })
       toast.success('OCR解析完了')
     } catch (e: any) {
@@ -334,6 +344,11 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                       <p className="text-sm text-green-600">✅ 現場自動マッチング: {ocrResult.matched_project}</p>
                     ) : (
                       <p className="text-sm text-amber-600">⚠️ 現場を手動で選択してください</p>
+                    )}
+                    {ocrResult.possible_duplicate && (
+                      <p className="text-sm text-red-600 font-medium">
+                        🚨 重複の可能性: {ocrResult.possible_duplicate.billing_month} に同業者で {formatYenFull(ocrResult.possible_duplicate.amount)} が登録済みです
+                      </p>
                     )}
                   </div>
 
