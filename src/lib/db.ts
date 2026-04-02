@@ -419,6 +419,130 @@ export async function softDeleteUser(id: string) {
 }
 
 // ==========================================
+// Trash (deleted items)
+// ==========================================
+
+export async function fetchDeletedProjects(): Promise<Project[]> {
+  const { data } = await supabase()
+    .from('projects')
+    .select('*, users(username)')
+    .eq('is_deleted', true)
+    .order('deleted_at', { ascending: false })
+  if (!data) return []
+  return data.map((p: any) => ({ ...p, manager_name: p.users?.username ?? p.manager_id }))
+}
+
+export async function fetchDeletedSales(): Promise<Sale[]> {
+  const { data } = await supabase()
+    .from('sales')
+    .select('*')
+    .eq('is_deleted', true)
+    .order('deleted_at', { ascending: false })
+  return data ?? []
+}
+
+export async function fetchDeletedCosts(): Promise<Cost[]> {
+  const { data } = await supabase()
+    .from('costs')
+    .select('*')
+    .eq('is_deleted', true)
+    .order('deleted_at', { ascending: false })
+  return data ?? []
+}
+
+export async function fetchDeletedPartners(): Promise<Partner[]> {
+  const { data } = await supabase()
+    .from('partners')
+    .select('*')
+    .eq('is_deleted', true)
+    .order('deleted_at', { ascending: false })
+  return data ?? []
+}
+
+export async function fetchDeletedAddons(): Promise<Addon[]> {
+  const { data } = await supabase()
+    .from('addons')
+    .select('*')
+    .eq('is_deleted', true)
+    .order('deleted_at', { ascending: false })
+  return data ?? []
+}
+
+/** 全工事（削除済み含む）の project_id → site_name マップ */
+export async function fetchAllProjectsMap(): Promise<Record<string, string>> {
+  const { data } = await supabase().from('projects').select('project_id, site_name')
+  if (!data) return {}
+  return Object.fromEntries(data.map((p: any) => [p.project_id, p.site_name]))
+}
+
+export async function restoreProject(id: string) {
+  const { error } = await supabase()
+    .from('projects')
+    .update({ is_deleted: null, deleted_at: null })
+    .eq('project_id', id)
+  // 工事削除時に一括削除された追加工事も復元
+  await supabase()
+    .from('addons')
+    .update({ is_deleted: null, deleted_at: null })
+    .eq('project_id', id)
+    .eq('is_deleted', true)
+  if (!error) {
+    invalidate('projects')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
+  return { error }
+}
+
+export async function restoreSale(id: string) {
+  const { error } = await supabase()
+    .from('sales')
+    .update({ is_deleted: null, deleted_at: null })
+    .eq('sales_id', id)
+  if (!error) {
+    invalidate('sales')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
+  return { error }
+}
+
+export async function restoreCost(id: string) {
+  const { error } = await supabase()
+    .from('costs')
+    .update({ is_deleted: null, deleted_at: null })
+    .eq('cost_id', id)
+  if (!error) {
+    invalidate('costs')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
+  return { error }
+}
+
+export async function restorePartner(id: string) {
+  const { error } = await supabase()
+    .from('partners')
+    .update({ is_deleted: null, deleted_at: null })
+    .eq('partner_id', id)
+  if (!error) invalidate('partners')
+  return { error }
+}
+
+export async function restoreAddon(id: string) {
+  const { error } = await supabase()
+    .from('addons')
+    .update({ is_deleted: null, deleted_at: null })
+    .eq('addon_id', id)
+  if (!error) {
+    invalidate('projects')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
+  return { error }
+}
+
+// ==========================================
 // System Settings
 // ==========================================
 async function getSystemSettingImpl(key: string, defaultValue: string): Promise<string> {

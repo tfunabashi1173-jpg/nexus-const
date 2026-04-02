@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from 'react'
 import { Project, Cost, Sale, Addon, Partner, User, ProjectSubManager } from '@/types'
-import { formatYenFull } from '@/lib/utils/date'
+import { formatYenFull, formatDateLocal } from '@/lib/utils/date'
 import { AmountInput } from '@/components/ui/amount-input'
 import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -48,7 +48,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // サブ担当
-  const today = new Date().toISOString().split('T')[0]
+  const today = formatDateLocal(new Date())
   const [subManagers, setSubManagers] = useState<ProjectSubManager[]>(initialSubManagers)
   const [subManagerId, setSubManagerId] = useState('')
   const [subStartDate, setSubStartDate] = useState(today)
@@ -56,6 +56,9 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
 
   function addSubManager() {
     if (!subManagerId || !subStartDate) { toast.error('担当者と開始日を入力してください'); return }
+    if (subManagerId === managerId) { toast.error('主担当者はサブ担当に追加できません'); return }
+    if (subManagers.some(sm => sm.manager_id === subManagerId)) { toast.error('既にサブ担当として登録されています'); return }
+    if (subEndDate && subEndDate < subStartDate) { toast.error('終了日は開始日以降の日付を入力してください'); return }
     startTransition(async () => {
       const res = await fetch(`/api/projects/${project.project_id}/sub-managers`, {
         method: 'POST',
@@ -490,7 +493,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                             </span>
                           </SelectTrigger>
                           <SelectContent>
-                            {users.filter(u => u.user_id !== managerId).map(u => (
+                            {users.filter(u => u.user_id !== managerId && u.role !== 'admin').map(u => (
                               <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>
                             ))}
                           </SelectContent>

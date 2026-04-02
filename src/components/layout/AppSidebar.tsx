@@ -17,6 +17,7 @@ import {
   Settings,
   LogOut,
   RefreshCw,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -128,18 +129,32 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <p className="px-2 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               設定
             </p>
-            <Link
-              href={adminItem.href}
-              className={cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
-                pathname.startsWith(adminItem.href)
-                  ? 'bg-blue-600 text-white font-medium'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              )}
-            >
-              <Settings className="h-4 w-4 shrink-0" />
-              {adminItem.label}
-            </Link>
+            <div className="space-y-0.5">
+              <Link
+                href={adminItem.href}
+                className={cn(
+                  'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
+                  pathname.startsWith(adminItem.href)
+                    ? 'bg-blue-600 text-white font-medium'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                )}
+              >
+                <Settings className="h-4 w-4 shrink-0" />
+                {adminItem.label}
+              </Link>
+              <Link
+                href="/trash"
+                className={cn(
+                  'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
+                  pathname.startsWith('/trash')
+                    ? 'bg-blue-600 text-white font-medium'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                )}
+              >
+                <Trash2 className="h-4 w-4 shrink-0" />
+                ゴミ箱
+              </Link>
+            </div>
           </div>
         )}
       </nav>

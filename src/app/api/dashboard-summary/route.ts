@@ -14,6 +14,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'fy_start と fy_end が必要です' }, { status: 400 })
   }
 
-  const summary = await getDashboardSummary(new Date(fyStartStr), new Date(fyEndStr))
+  const summary = await getDashboardSummary(new Date(fyStartStr + 'T00:00:00'), new Date(fyEndStr + 'T00:00:00'))
   return NextResponse.json(summary)
 }
