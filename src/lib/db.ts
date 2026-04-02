@@ -1,11 +1,14 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { Project, Partner, Sale, Cost, Addon, User, DashboardSummary, RevenueSummary, MonthlyRevenue } from '@/types'
 import { formatDateLocal } from '@/lib/utils/date'
-import { unstable_cache } from 'next/cache'
+import { unstable_cache, revalidateTag } from 'next/cache'
 import { perfStart } from '@/lib/perf'
 
 const supabase = () => createServiceRoleClient()
 const ACTIVE = 'is_deleted.is.null,is_deleted.eq.false'
+
+// Next.js 16 では revalidateTag が (tag, profile) を要求するため空の CacheLifeConfig を渡す
+const invalidate = (tag: string) => revalidateTag(tag, {})
 
 // ==========================================
 // Projects
@@ -42,6 +45,11 @@ export async function fetchProject(id: string): Promise<Project | null> {
 
 export async function createProject(project: Omit<Project, 'is_deleted' | 'deleted_at'>) {
   const { data, error } = await supabase().from('projects').insert(project).select().single()
+  if (!error) {
+    invalidate('projects')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { data, error }
 }
 
@@ -52,6 +60,11 @@ export async function updateProject(id: string, updates: Partial<Project>) {
     .eq('project_id', id)
     .select()
     .single()
+  if (!error) {
+    invalidate('projects')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { data, error }
 }
 
@@ -65,6 +78,11 @@ export async function softDeleteProject(id: string) {
     .from('addons')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq('project_id', id)
+  if (!error) {
+    invalidate('projects')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { error }
 }
 
@@ -104,6 +122,7 @@ export const fetchPartners = unstable_cache(fetchPartnersImpl, ['partners'], {
 
 export async function createPartner(partner: Omit<Partner, 'is_deleted' | 'deleted_at'>) {
   const { data, error } = await supabase().from('partners').insert(partner).select().single()
+  if (!error) invalidate('partners')
   return { data, error }
 }
 
@@ -114,6 +133,7 @@ export async function updatePartner(id: string, updates: Partial<Partner>) {
     .eq('partner_id', id)
     .select()
     .single()
+  if (!error) invalidate('partners')
   return { data, error }
 }
 
@@ -122,13 +142,14 @@ export async function softDeletePartner(id: string) {
     .from('partners')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq('partner_id', id)
+  if (!error) invalidate('partners')
   return { error }
 }
 
 // ==========================================
 // Sales
 // ==========================================
-export async function fetchSales(): Promise<Sale[]> {
+async function fetchSalesImpl(): Promise<Sale[]> {
   const end = perfStart('fetchSales')
   const { data } = await supabase()
     .from('sales')
@@ -138,6 +159,11 @@ export async function fetchSales(): Promise<Sale[]> {
   end()
   return data ?? []
 }
+
+export const fetchSales = unstable_cache(fetchSalesImpl, ['sales'], {
+  tags: ['sales'],
+  revalidate: 30,
+})
 
 export async function fetchSalesByProject(projectId: string): Promise<Sale[]> {
   const { data } = await supabase()
@@ -151,6 +177,11 @@ export async function fetchSalesByProject(projectId: string): Promise<Sale[]> {
 
 export async function createSale(sale: Omit<Sale, 'is_deleted' | 'deleted_at'>) {
   const { data, error } = await supabase().from('sales').insert(sale).select().single()
+  if (!error) {
+    invalidate('sales')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { data, error }
 }
 
@@ -161,6 +192,11 @@ export async function updateSale(id: string, updates: Partial<Sale>) {
     .eq('sales_id', id)
     .select()
     .single()
+  if (!error) {
+    invalidate('sales')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { data, error }
 }
 
@@ -169,22 +205,37 @@ export async function softDeleteSale(id: string) {
     .from('sales')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq('sales_id', id)
+  if (!error) {
+    invalidate('sales')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { error }
 }
 
 // ==========================================
 // Costs
 // ==========================================
-export async function fetchCosts(): Promise<Cost[]> {
+async function fetchCostsImpl(): Promise<Cost[]> {
   const end = perfStart('fetchCosts')
+  // 36ヶ月分に絞り込み（全件取得によるパフォーマンス劣化を防止）
+  const cutoff = new Date()
+  cutoff.setMonth(cutoff.getMonth() - 36)
+  const cutoffStr = formatDateLocal(new Date(cutoff.getFullYear(), cutoff.getMonth(), 1))
   const { data } = await supabase()
     .from('costs')
     .select('*')
     .or(ACTIVE)
+    .gte('billing_month', cutoffStr)
     .order('billing_month', { ascending: false })
   end()
   return data ?? []
 }
+
+export const fetchCosts = unstable_cache(fetchCostsImpl, ['costs'], {
+  tags: ['costs'],
+  revalidate: 30,
+})
 
 export async function fetchCostsByProject(projectId: string): Promise<Cost[]> {
   const { data } = await supabase()
@@ -198,6 +249,11 @@ export async function fetchCostsByProject(projectId: string): Promise<Cost[]> {
 
 export async function createCost(cost: Omit<Cost, 'is_deleted' | 'deleted_at'>) {
   const { data, error } = await supabase().from('costs').insert(cost).select().single()
+  if (!error) {
+    invalidate('costs')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { data, error }
 }
 
@@ -208,6 +264,11 @@ export async function updateCost(id: string, updates: Partial<Cost>) {
     .eq('cost_id', id)
     .select()
     .single()
+  if (!error) {
+    invalidate('costs')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { data, error }
 }
 
@@ -216,6 +277,11 @@ export async function softDeleteCost(id: string) {
     .from('costs')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq('cost_id', id)
+  if (!error) {
+    invalidate('costs')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { error }
 }
 
@@ -244,6 +310,11 @@ export async function fetchAllAddons(): Promise<Addon[]> {
 
 export async function createAddon(addon: Omit<Addon, 'is_deleted' | 'deleted_at'>) {
   const { data, error } = await supabase().from('addons').insert(addon).select().single()
+  if (!error) {
+    invalidate('projects')
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { data, error }
 }
 
@@ -254,6 +325,10 @@ export async function updateAddon(id: string, updates: Partial<Addon>) {
     .eq('addon_id', id)
     .select()
     .single()
+  if (!error) {
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { data, error }
 }
 
@@ -262,6 +337,10 @@ export async function softDeleteAddon(id: string) {
     .from('addons')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq('addon_id', id)
+  if (!error) {
+    invalidate('dashboard')
+    invalidate('revenue')
+  }
   return { error }
 }
 
@@ -324,6 +403,7 @@ export async function saveSystemSetting(key: string, value: string, description:
   const { error } = await supabase()
     .from('system_settings')
     .upsert({ setting_key: key, setting_value: value, description })
+  if (!error) invalidate('settings')
   return { error }
 }
 
@@ -387,6 +467,8 @@ export async function autoUpdateStatuses(): Promise<{ updated: boolean; message:
     count += d3.length
   }
 
+  if (count > 0) invalidate('projects')
+
   return { updated: count > 0, message: count > 0 ? `${count}件のステータスを更新しました` : '更新なし' }
 }
 
@@ -434,15 +516,10 @@ export function computeAlerts(projects: Project[], sales: Sale[], costs: Cost[])
 // Dashboard RPC
 // ==========================================
 
-// Supabase側でKPI・ランキング・アラートを一括計算して返す
-// fetchSales() / fetchCosts() の全件転送を完全排除
-export async function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<DashboardSummary> {
+async function getDashboardSummaryImpl(s: string, e: string): Promise<DashboardSummary> {
   const end = perfStart('getDashboardSummary')
   const { data, error } = await supabase()
-    .rpc('get_dashboard_summary', {
-      p_fy_start: formatDateLocal(fyStart),
-      p_fy_end:   formatDateLocal(fyEnd),
-    })
+    .rpc('get_dashboard_summary', { p_fy_start: s, p_fy_end: e })
   end()
   if (error || !data) {
     return {
@@ -456,14 +533,22 @@ export async function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<D
   return data as DashboardSummary
 }
 
+export function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<DashboardSummary> {
+  const s = formatDateLocal(fyStart)
+  const e = formatDateLocal(fyEnd)
+  return unstable_cache(
+    () => getDashboardSummaryImpl(s, e),
+    ['dashboard-summary', s, e],
+    { tags: ['dashboard'], revalidate: 30 }
+  )()
+}
+
 // ==========================================
 // Revenue RPC
 // ==========================================
 
-export async function getRevenueSummary(fyStart: Date, fyEnd: Date): Promise<RevenueSummary> {
+async function getRevenueSummaryImpl(fyStartStr: string, fyEndStr: string): Promise<RevenueSummary> {
   const end = perfStart('getRevenueSummary')
-  const fyStartStr = formatDateLocal(fyStart)
-  const fyEndStr   = formatDateLocal(fyEnd)
   const { data, error } = await supabase()
     .rpc('get_revenue_summary', {
       p_fy_start: fyStartStr,
@@ -490,7 +575,6 @@ export async function getRevenueSummary(fyStart: Date, fyEnd: Date): Promise<Rev
         .lte('billing_month', fyEndStr),
     ])
 
-    // 月ごとに集計
     const salesByMonth: Record<string, number> = {}
     for (const row of (salesRes.data ?? [])) {
       const m = (row.billing_date as string).slice(0, 7)
@@ -523,6 +607,16 @@ export async function getRevenueSummary(fyStart: Date, fyEnd: Date): Promise<Rev
   }
 
   return result
+}
+
+export function getRevenueSummary(fyStart: Date, fyEnd: Date): Promise<RevenueSummary> {
+  const s = formatDateLocal(fyStart)
+  const e = formatDateLocal(fyEnd)
+  return unstable_cache(
+    () => getRevenueSummaryImpl(s, e),
+    ['revenue-summary', s, e],
+    { tags: ['revenue'], revalidate: 30 }
+  )()
 }
 
 export async function getMonthlyRevenue(month: string): Promise<MonthlyRevenue> {
