@@ -26,9 +26,10 @@ export async function POST(req: NextRequest) {
       let mimeType = file.type
 
       if (file.type.startsWith('image/')) {
+        // OCR用: 解析精度優先で高解像度・高品質を維持（証憑保存用より大きめ）
         buffer = await sharp(buffer)
-          .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
-          .jpeg({ quality: 75 })
+          .resize({ width: 2560, height: 2560, fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 90 })
           .toBuffer() as Buffer
         mimeType = 'image/jpeg'
       }
