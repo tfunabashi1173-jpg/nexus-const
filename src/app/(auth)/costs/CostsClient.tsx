@@ -28,6 +28,7 @@ interface OcrResult {
   date: string
   details: InvoiceDetail[]
   matched_vendor?: string
+  matched_project?: string
 }
 
 export function CostsClient({ costs, vendors, projects }: Props) {
@@ -144,7 +145,22 @@ export function CostsClient({ costs, vendors, projects }: Props) {
       // 日付から請求月を設定
       if (data.date) setOcrMonth(data.date.slice(0, 7))
 
-      setOcrResult({ ...data, matched_vendor: match ? vendorMap[match.id] : undefined })
+      // 現場名の自動マッチング（明細の現場名で最頻出のものを使用）
+      const projectCandidates = projects.map(p => ({ id: p.project_id, name: p.site_name }))
+      const siteNames: string[] = (data.details ?? [])
+        .map((d: InvoiceDetail) => d.site_name)
+        .filter((s: string) => s && s !== '(不明)')
+      const freq: Record<string, number> = {}
+      siteNames.forEach((s: string) => { freq[s] = (freq[s] ?? 0) + 1 })
+      const dominantSite = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0]
+      const projectMatch = dominantSite ? findSimilarMatch(dominantSite, projectCandidates) : null
+      if (projectMatch) setOcrProjectId(projectMatch.id)
+
+      setOcrResult({
+        ...data,
+        matched_vendor: match ? vendorMap[match.id] : undefined,
+        matched_project: projectMatch ? projects.find(p => p.project_id === projectMatch.id)?.site_name : undefined,
+      })
       toast.success('OCR解析完了')
     } catch (e: any) {
       toast.error(`エラー: ${e.message}`)
@@ -313,6 +329,11 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                     <p className="text-sm">請求日: {ocrResult.date}</p>
                     {ocrResult.matched_vendor && (
                       <p className="text-sm text-green-600">✅ 業者自動マッチング: {ocrResult.matched_vendor}</p>
+                    )}
+                    {ocrResult.matched_project ? (
+                      <p className="text-sm text-green-600">✅ 現場自動マッチング: {ocrResult.matched_project}</p>
+                    ) : (
+                      <p className="text-sm text-amber-600">⚠️ 現場を手動で選択してください</p>
                     )}
                   </div>
 
