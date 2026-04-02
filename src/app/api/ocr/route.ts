@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: 'Gemini APIキーが未設定です' }, { status: 500 })
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const fileBuffer = Buffer.from(await file.arrayBuffer())
     const base64 = fileBuffer.toString('base64')
