@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { getSystemSetting } from '@/lib/db'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import sharp from 'sharp'
 
 export async function POST(req: NextRequest) {
   const user = await getSession()
@@ -9,8 +10,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const form = await req.formData()
-    const file = form.get('file') as File
-    if (!file) return NextResponse.json({ error: 'ファイルがありません' }, { status: 400 })
+    const files = form.getAll('file') as File[]
+    if (files.length === 0) return NextResponse.json({ error: 'ファイルがありません' }, { status: 400 })
 
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: 'Gemini APIキーが未設定です' }, { status: 500 })
@@ -19,11 +20,25 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({ model: geminiModel })
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const base64 = fileBuffer.toString('base64')
+    // 各ファイルを処理（画像は圧縮、PDFはそのまま）
+    const inlineDataParts = await Promise.all(files.map(async (file) => {
+      let buffer = Buffer.from(await file.arrayBuffer()) as Buffer
+      let mimeType = file.type
+
+      if (file.type.startsWith('image/')) {
+        buffer = await sharp(buffer)
+          .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 75 })
+          .toBuffer() as Buffer
+        mimeType = 'image/jpeg'
+      }
+
+      return { inlineData: { mimeType, data: buffer.toString('base64') } }
+    }))
 
     const prompt = `
 あなたは建設業の経理担当です。アップロードされた請求書画像を解析し、以下のデータをJSON形式で出力してください。
+複数枚の画像がある場合は全て同一請求書の別ページとして扱い、まとめて1つのJSONに抽出してください。
 
 【抽出ルール】
 1. **company**: 請求元の会社名。
@@ -36,7 +51,6 @@ export async function POST(req: NextRequest) {
 【注意】
 - 消費税行、合計行は除外してください。
 - 値引き行（▲）はマイナス金額として抽出してください。
-- 複数ページある場合も全て抽出してください。
 - 出力はJSONのみ。マークダウンの\`\`\`は不要。
 
 出力例:
@@ -50,15 +64,13 @@ export async function POST(req: NextRequest) {
 }
 `
 
+    // 複数画像 + プロンプトを1回のAPIコールで送信
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('TIMEOUT')), 30000)
+      setTimeout(() => reject(new Error('TIMEOUT')), 60000)
     )
 
     const result = await Promise.race([
-      model.generateContent([
-        { inlineData: { mimeType: file.type, data: base64 } },
-        prompt,
-      ]),
+      model.generateContent([...inlineDataParts, prompt]),
       timeoutPromise,
     ])
 
@@ -69,7 +81,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(data)
   } catch (e: any) {
     if (e.message === 'TIMEOUT') {
-      return NextResponse.json({ error: 'OCR処理がタイムアウトしました（30秒）' }, { status: 504 })
+      return NextResponse.json({ error: 'OCR処理がタイムアウトしました（60秒）' }, { status: 504 })
     }
     return NextResponse.json({ error: `解析エラー: ${e.message}` }, { status: 500 })
   }

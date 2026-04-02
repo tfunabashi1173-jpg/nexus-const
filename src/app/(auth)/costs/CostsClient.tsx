@@ -75,7 +75,7 @@ export function CostsClient({ costs, vendors, projects }: Props) {
   }, [projects, manualMonth, manualShowAll])
 
   // OCR
-  const [ocrFile, setOcrFile] = useState<File | null>(null)
+  const [ocrFiles, setOcrFiles] = useState<File[]>([])
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrVendorId, setOcrVendorId] = useState('')
@@ -130,11 +130,11 @@ export function CostsClient({ costs, vendors, projects }: Props) {
   }
 
   async function runOcr() {
-    if (!ocrFile) { toast.error('ファイルを選択してください'); return }
+    if (ocrFiles.length === 0) { toast.error('ファイルを選択してください'); return }
     setOcrLoading(true)
     try {
       const form = new FormData()
-      form.append('file', ocrFile)
+      ocrFiles.forEach(f => form.append('file', f))
       const res = await fetch('/api/ocr', { method: 'POST', body: form })
       if (!res.ok) {
         const { error } = await res.json()
@@ -199,9 +199,9 @@ export function CostsClient({ costs, vendors, projects }: Props) {
       // 現場ごとに1件ずつ登録。証憑ファイルは最初の1件にのみ添付。
       const results = await Promise.all(
         ocrSiteGroups.map((group, i) => {
-          if (i === 0 && ocrFile) {
+          if (i === 0 && ocrFiles.length > 0) {
             const form = new FormData()
-            form.append('file', ocrFile)
+            form.append('file', ocrFiles[0])  // 証憑は1枚目のみ添付
             form.append('project_id', group.project_id || '')
             form.append('vendor_id', ocrVendorId)
             form.append('billing_month', ocrMonth + '-01')
@@ -226,7 +226,7 @@ export function CostsClient({ costs, vendors, projects }: Props) {
       if (allOk) {
         toast.success(`${ocrSiteGroups.length}件の原価を登録しました`)
         setOcrResult(null)
-        setOcrFile(null)
+        setOcrFiles([])
         setOcrVendorId('')
         setOcrSiteGroups([])
         setOcrMonth('')
@@ -335,10 +335,18 @@ export function CostsClient({ costs, vendors, projects }: Props) {
             <CardContent className="pt-4 space-y-4">
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label>請求書ファイル（画像/PDF）</Label>
-                  <Input type="file" accept="image/*,.pdf" onChange={e => setOcrFile(e.target.files?.[0] ?? null)} />
+                  <Label>請求書ファイル（画像/PDF・複数枚可）</Label>
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf"
+                    multiple
+                    onChange={e => setOcrFiles(Array.from(e.target.files ?? []))}
+                  />
+                  {ocrFiles.length > 1 && (
+                    <p className="text-xs text-muted-foreground">{ocrFiles.length}枚選択中 → まとめて1回で解析します</p>
+                  )}
                 </div>
-                <Button onClick={runOcr} disabled={ocrLoading || !ocrFile} className="gap-2">
+                <Button onClick={runOcr} disabled={ocrLoading || ocrFiles.length === 0} className="gap-2">
                   <Bot className="h-4 w-4" />
                   {ocrLoading ? 'AI解析中...' : 'OCR解析を実行'}
                 </Button>
