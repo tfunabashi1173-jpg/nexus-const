@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { createProject } from '@/lib/db'
+import { createProject, insertAuditLog } from '@/lib/db'
 import { revalidateTag } from 'next/cache'
 
 export async function POST(req: NextRequest) {
@@ -11,5 +11,6 @@ export async function POST(req: NextRequest) {
   const { data, error } = await createProject(body)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   revalidateTag('projects', {})
+  await insertAuditLog(user, 'insert', 'projects', data.project_id, { site_name: data.site_name })
   return NextResponse.json(data)
 }

@@ -1,5 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { Project, Partner, Sale, Cost, Addon, User, ProjectSubManager, DashboardSummary, RevenueSummary, MonthlyRevenue } from '@/types'
+import { Project, Partner, Sale, Cost, Addon, User, ProjectSubManager, DashboardSummary, RevenueSummary, MonthlyRevenue, AuditLog, SessionUser } from '@/types'
 import { formatDateLocal } from '@/lib/utils/date'
 import { unstable_cache, revalidateTag } from 'next/cache'
 import { perfStart } from '@/lib/perf'
@@ -543,6 +543,30 @@ export async function restoreAddon(id: string) {
 }
 
 // ==========================================
+// Hard Delete (物理削除)
+// ==========================================
+export async function hardDeleteProject(id: string) {
+  const { error } = await supabase().from('projects').delete().eq('project_id', id)
+  return { error }
+}
+export async function hardDeleteSale(id: string) {
+  const { error } = await supabase().from('sales').delete().eq('sales_id', id)
+  return { error }
+}
+export async function hardDeleteCost(id: string) {
+  const { error } = await supabase().from('costs').delete().eq('cost_id', id)
+  return { error }
+}
+export async function hardDeletePartner(id: string) {
+  const { error } = await supabase().from('partners').delete().eq('partner_id', id)
+  return { error }
+}
+export async function hardDeleteAddon(id: string) {
+  const { error } = await supabase().from('addons').delete().eq('addon_id', id)
+  return { error }
+}
+
+// ==========================================
 // System Settings
 // ==========================================
 async function getSystemSettingImpl(key: string, defaultValue: string): Promise<string> {
@@ -789,6 +813,42 @@ export async function getMonthlyRevenue(month: string): Promise<MonthlyRevenue> 
   end()
   if (error || !data) return []
   return data as MonthlyRevenue
+}
+
+// ==========================================
+// Audit Log
+// ==========================================
+
+export async function insertAuditLog(
+  user: SessionUser,
+  action: 'insert' | 'update' | 'delete' | 'restore' | 'hard_delete',
+  targetTable: string,
+  targetKey: string,
+  detail: Record<string, any> = {}
+): Promise<void> {
+  try {
+    await supabase().from('app_audit_log').insert({
+      ts: new Date().toISOString(),
+      user_id: user.user_id,
+      user_name: user.username,
+      role: user.role,
+      action,
+      target_table: targetTable,
+      target_key: targetKey,
+      detail,
+    })
+  } catch {
+    // ログ失敗はサイレントに無視（メイン処理を止めない）
+  }
+}
+
+export async function fetchAuditLogs(limit = 200): Promise<AuditLog[]> {
+  const { data } = await supabase()
+    .from('app_audit_log')
+    .select('*')
+    .order('ts', { ascending: false })
+    .limit(limit)
+  return (data ?? []) as AuditLog[]
 }
 
 // スタンドアロン用（ダッシュボード以外から呼ぶ場合）

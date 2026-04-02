@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { User, Partner } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Trash2, Plus } from 'lucide-react'
+import { Trash2, Plus, Pencil, Check, X, Download, Search } from 'lucide-react'
 
 interface Props {
   users: User[]
@@ -21,7 +21,7 @@ interface Props {
   geminiModel: string
 }
 
-const PARTNER_CATEGORIES = ['得意先', '協力会社', '仕入先', '経費'] as const
+const PARTNER_CATEGORIES = ['得意先', '協力業者', '仕入先', '経費'] as const
 
 export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate, geminiModel }: Props) {
   const router = useRouter()
@@ -33,6 +33,95 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState<'admin' | 'user'>('user')
 
+  // ユーザー編集
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editUsername, setEditUsername] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editRole, setEditRole] = useState<'admin' | 'user'>('user')
+
+  function startEdit(u: User) {
+    setEditingId(u.user_id)
+    setEditUsername(u.username)
+    setEditPassword('')
+    setEditRole(u.role)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+  }
+
+  function saveEdit(id: string) {
+    startTransition(async () => {
+      const body: Record<string, string> = {}
+      if (editUsername) body.username = editUsername
+      if (editPassword) body.password = editPassword
+      if (editRole) body.role = editRole
+      const res = await fetch(`/api/master/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        toast.success('更新しました')
+        setEditingId(null)
+        router.refresh()
+      } else {
+        const { error } = await res.json()
+        toast.error(`エラー: ${error}`)
+      }
+    })
+  }
+
+  // 取引先編集
+  const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null)
+  const [editPartnerName, setEditPartnerName] = useState('')
+  const [editDefaultTaxType, setEditDefaultTaxType] = useState('')
+  const [editClosingDay, setEditClosingDay] = useState('')
+  const [editPaymentCycle, setEditPaymentCycle] = useState('')
+  const [editPaymentDay, setEditPaymentDay] = useState('')
+  const [editSafetyMember, setEditSafetyMember] = useState(false)
+
+  const SAFETY_CATS = ['協力業者', '仕入先']
+
+  function startEditPartner(p: Partner) {
+    setEditingPartnerId(p.partner_id)
+    setEditPartnerName(p.name)
+    setEditDefaultTaxType(p.default_tax_type ?? '税抜')
+    setEditClosingDay(p.closing_day != null ? String(p.closing_day) : '')
+    setEditPaymentCycle(p.payment_cycle != null ? String(p.payment_cycle) : '')
+    setEditPaymentDay(p.payment_day != null ? String(p.payment_day) : '')
+    setEditSafetyMember((p.safety_fee_rate ?? 0) > 0)
+  }
+
+  function saveEditPartner(id: string, cat: string) {
+    startTransition(async () => {
+      const body: Record<string, any> = { name: editPartnerName }
+      if (cat !== '得意先') {
+        body.default_tax_type = editDefaultTaxType
+      } else {
+        if (editClosingDay) body.closing_day = parseInt(editClosingDay)
+        if (editPaymentCycle) body.payment_cycle = parseInt(editPaymentCycle)
+        if (editPaymentDay) body.payment_day = parseInt(editPaymentDay)
+      }
+      if (SAFETY_CATS.includes(cat)) {
+        body.safety_fee_rate = editSafetyMember ? 1 : null
+      }
+      const res = await fetch(`/api/master/partners/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        toast.success('更新しました')
+        setEditingPartnerId(null)
+        router.refresh()
+      } else {
+        const { error } = await res.json()
+        toast.error(`エラー: ${error}`)
+      }
+    })
+  }
+
   // 取引先追加フォーム
   const [newPartnerName, setNewPartnerName] = useState('')
   const [newPartnerCategory, setNewPartnerCategory] = useState<string>('得意先')
@@ -40,6 +129,103 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
   const [newClosingDay, setNewClosingDay] = useState('')
   const [newPaymentCycle, setNewPaymentCycle] = useState('')
   const [newPaymentDay, setNewPaymentDay] = useState('')
+  const [newSafetyMember, setNewSafetyMember] = useState(false)
+
+  // 証憑管理
+  const now = new Date()
+  const [evidenceYear, setEvidenceYear] = useState(now.getFullYear())
+  const [evidenceMonth, setEvidenceMonth] = useState(now.getMonth() + 1)
+  const [evidenceFiles, setEvidenceFiles] = useState<{ name: string; path: string; signedUrl: string | null }[]>([])
+  const [evidenceSearched, setEvidenceSearched] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false)
+  const [previewFile, setPreviewFile] = useState<{ name: string; signedUrl: string } | null>(null)
+
+  function isImageFile(name: string) {
+    return /\.(jpg|jpeg|png|gif|webp)$/i.test(name)
+  }
+
+  async function searchEvidence() {
+    const m = String(evidenceMonth).padStart(2, '0')
+    const res = await fetch(`/api/admin/evidence?year=${evidenceYear}&month=${m}`)
+    const json = await res.json()
+    setEvidenceFiles(json.files ?? [])
+    setEvidenceSearched(true)
+    setShowDeleteConfirm(false)
+    setPreviewFile(null)
+  }
+
+  async function downloadEvidenceZip() {
+    setIsDownloadingZip(true)
+    try {
+      const m = String(evidenceMonth).padStart(2, '0')
+      const res = await fetch(`/api/admin/evidence?year=${evidenceYear}&month=${m}&download=1`)
+      if (!res.ok) { toast.error('ダウンロードに失敗しました'); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `evidence_${evidenceYear}${m}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setIsDownloadingZip(false)
+    }
+  }
+
+  async function deleteAllEvidence() {
+    const res = await fetch('/api/admin/evidence', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year: evidenceYear, month: evidenceMonth }),
+    })
+    if (res.ok) {
+      const { deleted } = await res.json()
+      toast.success(`${deleted}件削除しました`)
+      setEvidenceFiles([])
+      setShowDeleteConfirm(false)
+    } else {
+      toast.error('削除に失敗しました')
+    }
+  }
+
+  // バックアップ インポート
+  const importFileRef = useRef<HTMLInputElement>(null)
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  async function importBackup() {
+    const file = importFileRef.current?.files?.[0]
+    if (!file) { toast.error('ファイルを選択してください'); return }
+    startTransition(async () => {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch('/api/admin/backup', { method: 'POST', body: form })
+      const json = await res.json()
+      if (res.ok) {
+        const details = (json.results as any[]).map((r: any) => `${r.sheet}: ${r.count}件`).join('、')
+        setImportResult({ success: true, message: `インポート完了（合計${json.total}件）: ${details}` })
+        if (json.errors?.length) toast.error(`一部エラー: ${json.errors.join(', ')}`)
+        else toast.success('インポートが完了しました')
+        router.refresh()
+      } else {
+        setImportResult({ success: false, message: `エラー: ${json.error}` })
+        toast.error('インポートに失敗しました')
+      }
+    })
+  }
+
+  async function downloadBackup() {
+    const res = await fetch('/api/admin/backup')
+    if (!res.ok) { toast.error('バックアップ作成に失敗しました'); return }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const today = new Date().toISOString().slice(0, 10)
+    a.download = `nexus_backup_${today}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   // システム設定
   const [fiscalMonth, setFiscalMonth] = useState(fiscalStartMonth)
@@ -93,11 +279,13 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
           closing_day: newClosingDay ? parseInt(newClosingDay) : null,
           payment_cycle: newPaymentCycle ? parseInt(newPaymentCycle) : null,
           payment_day: newPaymentDay ? parseInt(newPaymentDay) : null,
+          safety_fee_rate: SAFETY_CATS.includes(newPartnerCategory) && newSafetyMember ? 1 : null,
         }),
       })
       if (res.ok) {
         toast.success('取引先を登録しました')
         setNewPartnerName(''); setNewDefaultTaxType('税抜'); setNewClosingDay(''); setNewPaymentCycle(''); setNewPaymentDay('')
+        setNewSafetyMember(false)
         router.refresh()
       } else {
         const { error } = await res.json()
@@ -146,6 +334,8 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
             <TabsTrigger key={cat} value={cat}>{cat}</TabsTrigger>
           ))}
           <TabsTrigger value="settings">🔧 システム設定</TabsTrigger>
+          <TabsTrigger value="evidence">🗂️ 証憑管理</TabsTrigger>
+          <TabsTrigger value="backup">💾 バックアップ</TabsTrigger>
         </TabsList>
 
         {/* ユーザー管理 */}
@@ -158,6 +348,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                     <tr className="bg-slate-800 text-white">
                       <th className="text-left py-2.5 px-3 font-medium">ID</th>
                       <th className="text-left py-2.5 px-3 font-medium">名前</th>
+                      <th className="text-left py-2.5 px-3 font-medium">パスワード</th>
                       <th className="text-left py-2.5 px-3 font-medium">権限</th>
                       <th className="py-2.5 px-3"></th>
                     </tr>
@@ -165,16 +356,50 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                   <tbody>
                     {users.map((u, i) => (
                       <tr key={u.user_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
-                        <td className="py-2 pr-3 font-mono text-xs">{u.user_id}</td>
-                        <td className="py-2 pr-3">{u.username}</td>
-                        <td className="py-2 pr-3">
-                          <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>{u.role}</Badge>
-                        </td>
-                        <td className="py-2 text-right">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteUser(u.user_id)} disabled={isPending}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </td>
+                        <td className="py-2 px-3 font-mono text-xs">{u.user_id}</td>
+                        {editingId === u.user_id ? (
+                          <>
+                            <td className="py-1.5 px-3">
+                              <Input value={editUsername} onChange={e => setEditUsername(e.target.value)} className="h-7 text-sm w-32" />
+                            </td>
+                            <td className="py-1.5 px-3">
+                              <Input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="変更する場合のみ" className="h-7 text-sm w-40" />
+                            </td>
+                            <td className="py-1.5 px-3">
+                              <Select value={editRole} onValueChange={(v: any) => setEditRole(v)}>
+                                <SelectTrigger className="h-7 text-sm w-24"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="user">user</SelectItem>
+                                  <SelectItem value="admin">admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600" onClick={() => saveEdit(u.user_id)} disabled={isPending}>
+                                <Check className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelEdit} disabled={isPending}>
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-2 px-3">{u.username}</td>
+                            <td className="py-2 px-3 text-slate-400 text-xs">••••••••</td>
+                            <td className="py-2 px-3">
+                              <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>{u.role}</Badge>
+                            </td>
+                            <td className="py-2 px-3 text-right whitespace-nowrap">
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500" onClick={() => startEdit(u)} disabled={isPending}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteUser(u.user_id)} disabled={isPending}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -230,30 +455,88 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                         {cat !== '得意先' && (
                           <th className="text-center py-2.5 px-3 font-medium">税区分</th>
                         )}
+                        {SAFETY_CATS.includes(cat) && (
+                          <th className="text-center py-2.5 px-3 font-medium">安全協力会費</th>
+                        )}
                         <th className="py-2.5 px-3"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {partnersByCategory(cat).map((p, i) => (
                         <tr key={p.partner_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
-                          <td className="py-2 pr-3">{p.name}</td>
-                          {cat === '得意先' && <>
-                            <td className="py-2 pr-3 text-center">{p.closing_day === 99 ? '末日' : p.closing_day}</td>
-                            <td className="py-2 pr-3 text-center">{p.payment_cycle}ヶ月後</td>
-                            <td className="py-2 pr-3 text-center">{p.payment_day === 99 ? '末日' : p.payment_day}日</td>
-                          </>}
-                          {cat !== '得意先' && (
-                            <td className="py-2 pr-3 text-center">
-                              <Badge variant={p.default_tax_type === '免税' ? 'outline' : p.default_tax_type === '税込' ? 'secondary' : 'default'} className="text-xs">
-                                {p.default_tax_type ?? '税抜'}
-                              </Badge>
-                            </td>
+                          {editingPartnerId === p.partner_id ? (
+                            <>
+                              <td className="py-1.5 px-3">
+                                <Input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} className="h-7 text-sm w-40" />
+                              </td>
+                              {cat === '得意先' ? (
+                                <>
+                                  <td className="py-1.5 px-3">
+                                    <Input type="number" value={editClosingDay} onChange={e => setEditClosingDay(e.target.value)} className="h-7 text-sm w-20" />
+                                  </td>
+                                  <td className="py-1.5 px-3">
+                                    <Input type="number" value={editPaymentCycle} onChange={e => setEditPaymentCycle(e.target.value)} className="h-7 text-sm w-20" />
+                                  </td>
+                                  <td className="py-1.5 px-3">
+                                    <Input type="number" value={editPaymentDay} onChange={e => setEditPaymentDay(e.target.value)} className="h-7 text-sm w-20" />
+                                  </td>
+                                </>
+                              ) : (
+                                <td className="py-1.5 px-3">
+                                  <Select value={editDefaultTaxType} onValueChange={v => setEditDefaultTaxType(v ?? '税抜')}>
+                                    <SelectTrigger className="h-7 text-sm w-28"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="税抜">税抜</SelectItem>
+                                      <SelectItem value="税込">税込</SelectItem>
+                                      <SelectItem value="免税">免税</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+                              )}
+                              {SAFETY_CATS.includes(cat) && (
+                                <td className="py-1.5 px-3 text-center">
+                                  <input type="checkbox" checked={editSafetyMember} onChange={e => setEditSafetyMember(e.target.checked)} className="h-4 w-4 accent-primary" />
+                                </td>
+                              )}
+                              <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600" onClick={() => saveEditPartner(p.partner_id, cat)} disabled={isPending}>
+                                  <Check className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingPartnerId(null)} disabled={isPending}>
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="py-2 px-3">{p.name}</td>
+                              {cat === '得意先' && <>
+                                <td className="py-2 px-3 text-center">{p.closing_day === 99 ? '末日' : p.closing_day}</td>
+                                <td className="py-2 px-3 text-center">{p.payment_cycle}ヶ月後</td>
+                                <td className="py-2 px-3 text-center">{p.payment_day === 99 ? '末日' : p.payment_day}日</td>
+                              </>}
+                              {cat !== '得意先' && (
+                                <td className="py-2 px-3 text-center">
+                                  <Badge variant={p.default_tax_type === '免税' ? 'outline' : p.default_tax_type === '税込' ? 'secondary' : 'default'} className="text-xs">
+                                    {p.default_tax_type ?? '税抜'}
+                                  </Badge>
+                                </td>
+                              )}
+                              {SAFETY_CATS.includes(cat) && (
+                                <td className="py-2 px-3 text-center text-sm">
+                                  {(p.safety_fee_rate ?? 0) > 0 ? '○' : '—'}
+                                </td>
+                              )}
+                              <td className="py-2 px-3 text-right whitespace-nowrap">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500" onClick={() => startEditPartner(p)} disabled={isPending}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deletePartner(p.partner_id)} disabled={isPending}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </td>
+                            </>
                           )}
-                          <td className="py-2 text-right">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deletePartner(p.partner_id)} disabled={isPending}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </td>
                         </tr>
                       ))}
                       {partnersByCategory(cat).length === 0 && (
@@ -296,6 +579,15 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                         <Input type="number" value={newPaymentDay} onChange={e => setNewPaymentDay(e.target.value)} placeholder="99" />
                       </div>
                     </>}
+                    {SAFETY_CATS.includes(cat) && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">安全協力会費</Label>
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" checked={newSafetyMember} onChange={e => setNewSafetyMember(e.target.checked)} className="h-4 w-4 accent-primary" />
+                          <span className="text-sm">参加</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <Button
                     onClick={() => { setNewPartnerCategory(cat); addPartner() }}
@@ -338,6 +630,202 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
             </CardContent>
           </Card>
         </TabsContent>
+        {/* 証憑管理 */}
+        <TabsContent value="evidence">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">画像データ（証憑）の管理</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">対象年</Label>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => setEvidenceYear(v => v - 1)}>−</Button>
+                    <span className="w-16 text-center text-sm font-medium">{evidenceYear}</span>
+                    <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => setEvidenceYear(v => v + 1)}>+</Button>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">対象月</Label>
+                  <Select value={String(evidenceMonth)} onValueChange={v => setEvidenceMonth(Number(v))}>
+                    <SelectTrigger className="w-24 h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                        <SelectItem key={m} value={String(m)}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button size="sm" onClick={searchEvidence} className="bg-red-600 hover:bg-red-700">
+                  <Search className="h-3.5 w-3.5 mr-1" />
+                  対象ファイルを検索
+                </Button>
+              </div>
+
+              {evidenceSearched && (
+                <div className="space-y-3">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded px-4 py-3 text-sm text-yellow-800">
+                    {evidenceFiles.length > 0
+                      ? `⚠ ${evidenceFiles.length}個のファイルが見つかりました。`
+                      : 'ファイルが見つかりませんでした。'}
+                  </div>
+
+                  {evidenceFiles.length > 0 && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={downloadEvidenceZip}
+                        disabled={isDownloadingZip}
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1" />
+                        {isDownloadingZip ? 'ダウンロード中...' : `まとめてZIPで保存（${evidenceFiles.length}ファイル）`}
+                      </Button>
+
+                      {/* ファイル一覧 */}
+                      <div className="border rounded overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-800 text-white">
+                              <th className="text-left py-2 px-3 font-medium">ファイル名</th>
+                              <th className="py-2 px-3 w-32"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {evidenceFiles.map((f, i) => (
+                              <tr key={f.path} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                                <td className="py-2 px-3 text-slate-700 truncate max-w-0" title={f.name}>
+                                  {isImageFile(f.name) && (
+                                    <button
+                                      className="text-blue-600 hover:underline mr-2"
+                                      onClick={() => f.signedUrl && setPreviewFile({ name: f.name, signedUrl: f.signedUrl! })}
+                                    >
+                                      {f.name}
+                                    </button>
+                                  )}
+                                  {!isImageFile(f.name) && <span>{f.name}</span>}
+                                </td>
+                                <td className="py-2 px-3 text-right">
+                                  {f.signedUrl && (
+                                    <a
+                                      href={f.signedUrl}
+                                      download={f.name}
+                                      className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-blue-600"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                      DL
+                                    </a>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* 画像プレビューモーダル */}
+                      {previewFile && (
+                        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setPreviewFile(null)}>
+                          <div className="bg-white rounded-lg max-w-3xl max-h-[90vh] overflow-auto p-4 space-y-2" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium truncate">{previewFile.name}</span>
+                              <div className="flex items-center gap-2 ml-4">
+                                <a href={previewFile.signedUrl} download={previewFile.name} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                                  <Download className="h-3.5 w-3.5" />ダウンロード
+                                </a>
+                                <button className="text-slate-500 hover:text-slate-800 text-lg leading-none" onClick={() => setPreviewFile(null)}>×</button>
+                              </div>
+                            </div>
+                            <img src={previewFile.signedUrl} alt={previewFile.name} className="max-w-full rounded" />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t">
+                        {!showDeleteConfirm ? (
+                          <button
+                            className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1 transition-colors"
+                            onClick={() => setShowDeleteConfirm(true)}
+                          >
+                            <span>›</span>
+                            <Trash2 className="h-3.5 w-3.5" />
+                            ファイルを全て削除する
+                          </button>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-sm text-red-600 font-medium">
+                              {evidenceYear}年{evidenceMonth}月の証憑{evidenceFiles.length}件を完全削除します。この操作は取り消せません。
+                            </p>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="destructive" onClick={deleteAllEvidence}>
+                                削除する
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                                キャンセル
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* バックアップ＆復元 */}
+        <TabsContent value="backup">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">バックアップ＆復元</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="export">
+                <TabsList>
+                  <TabsTrigger value="export">エクスポート</TabsTrigger>
+                  <TabsTrigger value="import">インポート</TabsTrigger>
+                </TabsList>
+                <TabsContent value="export" className="space-y-3 pt-3">
+                  <div className="bg-blue-50 border border-blue-200 rounded px-4 py-3 text-sm text-blue-800">
+                    全データをExcelでダウンロードします（工事台帳・取引先・原価明細・売上明細・追加工事・ユーザー）
+                  </div>
+                  <Button size="sm" onClick={downloadBackup}>
+                    <Download className="h-3.5 w-3.5 mr-1" />
+                    バックアップ作成
+                  </Button>
+                </TabsContent>
+                <TabsContent value="import" className="space-y-3 pt-3">
+                  <div className="bg-red-50 border border-red-200 rounded px-4 py-3 text-sm text-red-800 space-y-1">
+                    <p className="font-medium">⚠ 注意</p>
+                    <p>バックアップExcelを読み込み、既存データにupsert（上書き追加）します。</p>
+                    <p>パスワードもハッシュ値のまま復元されます。削除済みデータは復元されません。</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Excelファイル（.xlsx）を選択</Label>
+                    <input
+                      type="file"
+                      accept=".xlsx"
+                      ref={importFileRef}
+                      className="block text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-input file:bg-background file:text-sm file:cursor-pointer"
+                    />
+                  </div>
+                  <Button size="sm" onClick={importBackup} disabled={isPending}>
+                    インポート実行
+                  </Button>
+                  {importResult && (
+                    <div className={`rounded px-4 py-3 text-sm ${importResult.success ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                      {importResult.message}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
     </div>
   )

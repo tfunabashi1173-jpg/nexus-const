@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { updateProject, softDeleteProject } from '@/lib/db'
+import { updateProject, softDeleteProject, insertAuditLog } from '@/lib/db'
 import { revalidateTag } from 'next/cache'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -12,6 +12,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { data, error } = await updateProject(id, body)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   revalidateTag('projects', {})
+  await insertAuditLog(user, 'update', 'projects', id)
   return NextResponse.json(data)
 }
 
@@ -23,5 +24,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await softDeleteProject(id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   revalidateTag('projects', {})
+  await insertAuditLog(user, 'delete', 'projects', id)
   return NextResponse.json({ success: true })
 }

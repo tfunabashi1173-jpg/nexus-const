@@ -18,6 +18,7 @@ import {
   LogOut,
   RefreshCw,
   Trash2,
+  ClipboardList,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -153,6 +154,18 @@ export function AppSidebar({ user }: AppSidebarProps) {
               >
                 <Trash2 className="h-4 w-4 shrink-0" />
                 ゴミ箱
+              </Link>
+              <Link
+                href="/audit"
+                className={cn(
+                  'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
+                  pathname.startsWith('/audit')
+                    ? 'bg-blue-600 text-white font-medium'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                )}
+              >
+                <ClipboardList className="h-4 w-4 shrink-0" />
+                操作履歴
               </Link>
             </div>
           </div>

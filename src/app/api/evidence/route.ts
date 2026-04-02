@@ -12,5 +12,10 @@ export async function GET(req: NextRequest) {
   const url = await getEvidenceSignedUrl(path)
   if (!url) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // ?json=1 の場合はURLをJSONで返す（img srcに直接使用するため）
+  if (req.nextUrl.searchParams.get('json') === '1') {
+    return NextResponse.json({ signedUrl: url })
+  }
+
   return NextResponse.redirect(url)
 }

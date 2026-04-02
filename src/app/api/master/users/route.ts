@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { createUser } from '@/lib/db'
+import { createUser, insertAuditLog } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 
 export async function POST(req: NextRequest) {
@@ -16,5 +16,6 @@ export async function POST(req: NextRequest) {
     role: body.role,
   })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  await insertAuditLog(user, 'insert', 'users', body.user_id, { username: body.username })
   return NextResponse.json(data)
 }

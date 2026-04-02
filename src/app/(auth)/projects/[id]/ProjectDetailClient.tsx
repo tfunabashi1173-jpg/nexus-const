@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Trash2, Save, ExternalLink, X, Plus } from 'lucide-react'
+import { Trash2, Save, ExternalLink, X, Plus, Paperclip, ImageIcon } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 
 interface Props {
@@ -569,6 +569,24 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
   const [saving, setSaving] = useState<Record<string, boolean>>({})
   const [newAmount, setNewAmount] = useState('')
   const [creating, setCreating] = useState(false)
+  const [preview, setPreview] = useState<{ url: string; isPdf: boolean } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  async function openPreview(filePath: string) {
+    setPreviewLoading(true)
+    try {
+      const res = await fetch(`/api/evidence?path=${encodeURIComponent(filePath)}&json=1`)
+      const { signedUrl } = await res.json()
+      const isPdf = /\.pdf$/i.test(filePath)
+      setPreview({ url: signedUrl, isPdf })
+    } catch {
+      toast.error('プレビューの取得に失敗しました')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+  const [uploading, setUploading] = useState<Record<string, boolean>>({})
+  const [newFile, setNewFile] = useState<File | null>(null)
 
   // 月一覧（昇順）＋ユーザーが追加した月
   const dbMonths = [...new Set(costs.map(c => c.billing_month?.slice(0, 7) ?? ''))].filter(Boolean)
@@ -635,25 +653,47 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     const amt = parseInt(newAmount.replace(/,/g, ''))
     if (isNaN(amt) || amt <= 0) { toast.error('金額を入力してください'); return }
     setCreating(true)
-    const res = await fetch('/api/costs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        project_id: projectId,
-        vendor_id: dialog.vendor_id,
-        billing_month: dialog.month + '-01',
-        amount: amt,
-      }),
-    })
+
+    let res: Response
+    if (newFile) {
+      const form = new FormData()
+      form.append('project_id', projectId)
+      form.append('vendor_id', dialog.vendor_id)
+      form.append('billing_month', dialog.month + '-01')
+      form.append('amount', String(amt))
+      form.append('target_date', dialog.month + '-01')
+      form.append('file', newFile)
+      res = await fetch('/api/costs', { method: 'POST', body: form })
+    } else {
+      res = await fetch('/api/costs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, vendor_id: dialog.vendor_id, billing_month: dialog.month + '-01', amount: amt }),
+      })
+    }
+
     setCreating(false)
     if (res.ok) {
       toast.success('登録しました')
       setNewAmount('')
+      setNewFile(null)
       setExtraMonths(prev => prev.filter(m => m !== dialog.month))
       setExtraVendors(prev => prev.filter(v => v !== dialog.vendor_id))
       router.refresh()
       setDialog(null)
     } else toast.error('登録に失敗しました')
+  }
+
+  async function uploadEvidenceForCost(cost: Cost, file: File) {
+    setUploading(u => ({ ...u, [cost.cost_id]: true }))
+    const form = new FormData()
+    form.append('id', cost.cost_id)
+    form.append('file', file)
+    form.append('target_date', cost.billing_month)
+    const res = await fetch('/api/costs', { method: 'PATCH', body: form })
+    setUploading(u => ({ ...u, [cost.cost_id]: false }))
+    if (res.ok) { toast.success('証憑を添付しました'); router.refresh() }
+    else toast.error('アップロードに失敗しました')
   }
 
   function addMonthColumn() {
@@ -776,7 +816,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
         </div>
       </div>
 
-      <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null) }}>
+      <Dialog open={!!dialog} onOpenChange={open => { if (!open) { setDialog(null); setNewFile(null); setPreview(null) } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -789,19 +829,50 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
 
           <div className="space-y-3">
             {dialogRecords.map(cost => (
-              <div key={cost.cost_id} className="flex items-center gap-2 border rounded p-2">
-                <input
-                  className="flex-1 text-right border rounded px-2 py-1 text-sm"
-                  value={editAmounts[cost.cost_id] ?? cost.amount.toLocaleString()}
-                  onChange={e => setEditAmounts(a => ({ ...a, [cost.cost_id]: e.target.value }))}
-                  onFocus={e => e.target.select()}
-                />
-                <Button size="sm" variant="outline" disabled={saving[cost.cost_id]} onClick={() => saveRecord(cost)}>
-                  <Save className="h-3.5 w-3.5" />
-                </Button>
-                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => deleteRecord(cost)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+              <div key={cost.cost_id} className="border rounded p-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    className="flex-1 text-right border rounded px-2 py-1 text-sm"
+                    value={editAmounts[cost.cost_id] ?? cost.amount.toLocaleString()}
+                    onChange={e => setEditAmounts(a => ({ ...a, [cost.cost_id]: e.target.value }))}
+                    onFocus={e => e.target.select()}
+                  />
+                  <Button size="sm" variant="outline" disabled={saving[cost.cost_id]} onClick={() => saveRecord(cost)}>
+                    <Save className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => deleteRecord(cost)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {cost.file_path ? (
+                    <button
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                      disabled={previewLoading}
+                      onClick={() => openPreview(cost.file_path!)}
+                    >
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      {previewLoading ? '読込中...' : '証憑を見る'}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400">証憑なし</span>
+                  )}
+                  <label className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 cursor-pointer ml-auto">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    {uploading[cost.cost_id] ? 'アップロード中...' : cost.file_path ? '差し替え' : '添付'}
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      disabled={uploading[cost.cost_id]}
+                      onChange={e => {
+                        const f = e.target.files?.[0]
+                        if (f) uploadEvidenceForCost(cost, f)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             ))}
             {dialogRecords.length > 0 && (
@@ -809,19 +880,78 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                 合計: {fmtAmt(dialogRecords.reduce((s, c) => s + c.amount, 0))}
               </div>
             )}
-            <div className="flex items-center gap-2 pt-2 border-t">
+            <div className="pt-2 border-t space-y-2">
               <span className="text-xs text-muted-foreground">新規追加</span>
-              <input
-                className="flex-1 text-right border rounded px-2 py-1 text-sm"
-                placeholder="金額"
-                value={newAmount}
-                onChange={e => setNewAmount(e.target.value)}
-                onFocus={e => e.target.select()}
-                onKeyDown={e => { if (e.key === 'Enter') createRecord() }}
-              />
-              <Button size="sm" disabled={creating || !newAmount} onClick={createRecord}>登録</Button>
+              <div className="flex items-center gap-2">
+                <input
+                  className="flex-1 text-right border rounded px-2 py-1 text-sm"
+                  placeholder="金額"
+                  value={newAmount}
+                  onChange={e => setNewAmount(e.target.value)}
+                  onFocus={e => e.target.select()}
+                  onKeyDown={e => { if (e.key === 'Enter') createRecord() }}
+                />
+                <Button size="sm" disabled={creating || !newAmount} onClick={createRecord}>登録</Button>
+              </div>
+              <label className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 cursor-pointer w-fit">
+                <Paperclip className="h-3.5 w-3.5" />
+                {newFile ? newFile.name : '証憑ファイルを添付（任意）'}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={e => setNewFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              {newFile && (
+                <button className="text-xs text-slate-400 hover:text-red-500" onClick={() => setNewFile(null)}>
+                  × ファイルを削除
+                </button>
+              )}
             </div>
           </div>
+
+          {/* 証憑プレビューモーダル */}
+          {preview && (
+            <div
+              className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+              onClick={() => setPreview(null)}
+            >
+              <div
+                className="bg-white rounded-lg w-full max-w-3xl p-4 space-y-2"
+                style={{ maxHeight: '90vh' }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">証憑プレビュー</span>
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={preview.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      別タブで開く
+                    </a>
+                    <button className="text-slate-500 hover:text-slate-800 text-lg leading-none" onClick={() => setPreview(null)}>×</button>
+                  </div>
+                </div>
+                {preview.isPdf ? (
+                  <iframe
+                    src={preview.url}
+                    className="w-full rounded border"
+                    style={{ height: '75vh' }}
+                    title="証憑PDF"
+                  />
+                ) : (
+                  <div className="overflow-auto" style={{ maxHeight: '75vh' }}>
+                    <img src={preview.url} alt="証憑" className="max-w-full rounded" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

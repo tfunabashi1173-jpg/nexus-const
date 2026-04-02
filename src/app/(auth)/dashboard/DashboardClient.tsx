@@ -20,8 +20,9 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
 } from 'recharts'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, EyeOff, Eye } from 'lucide-react'
 import Link from 'next/link'
 
 interface Props {
@@ -38,6 +39,19 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
   const [selectedFY, setSelectedFY] = useState(currentFY)
   const [overrideSummary, setOverrideSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(false)
+  const [masked, setMasked] = useState(false)
+
+  useEffect(() => {
+    setMasked(localStorage.getItem('dashboard_masked') === '1')
+  }, [])
+
+  function toggleMasked() {
+    setMasked(v => {
+      const next = !v
+      localStorage.setItem('dashboard_masked', next ? '1' : '0')
+      return next
+    })
+  }
 
   useEffect(() => {
     if (selectedFY === currentFY) {
@@ -84,6 +98,14 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
             </SelectContent>
           </Select>
           {loading && <span className="text-sm text-slate-400 animate-pulse">読み込み中...</span>}
+          <button
+            onClick={toggleMasked}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-slate-500 hover:bg-slate-200 transition-colors"
+            title={masked ? '金額を表示' : '金額を隠す'}
+          >
+            {masked ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {masked ? '金額表示' : '金額非表示'}
+          </button>
         </div>
       </div>
 
@@ -92,6 +114,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
         <KpiContent
           summaryPromise={summaryPromise}
           overrideSummary={overrideSummary}
+          masked={masked}
         />
       </Suspense>
 
@@ -125,7 +148,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
                           {p.start_date?.slice(0, 7)} 〜 {p.end_date?.slice(0, 7)}
                         </td>
                         <td className="py-2.5 px-3 text-slate-500">{p.manager_name}</td>
-                        <td className="py-2.5 px-3 text-right font-medium tabular-nums">{formatYenFull(base + addon)}</td>
+                        <td className="py-2.5 px-3 text-right font-medium tabular-nums">{masked ? '¥ ****' : formatYenFull(base + addon)}</td>
                       </tr>
                     )
                   })}
@@ -142,6 +165,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
           summaryPromise={summaryPromise}
           overrideSummary={overrideSummary}
           partners={partners}
+          masked={masked}
         />
       </Suspense>
     </div>
@@ -153,9 +177,11 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
 function KpiContent({
   summaryPromise,
   overrideSummary,
+  masked,
 }: {
   summaryPromise: Promise<DashboardSummary>
   overrideSummary: DashboardSummary | null
+  masked: boolean
 }) {
   const initialSummary = use(summaryPromise)
   const summary = overrideSummary ?? initialSummary
@@ -165,6 +191,8 @@ function KpiContent({
   const totalProfit = totalSales - totalCosts
   const { alerts } = summary
   const hasAlerts = alerts.unpaid_sales > 0 || alerts.orphaned_costs > 0 || alerts.unbilled_costs > 0
+
+  const fmt = (v: number) => masked ? '¥ ****' : formatYen(v)
 
   return (
     <>
@@ -196,15 +224,15 @@ function KpiContent({
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-blue-600 rounded-xl p-5 text-white shadow-sm">
           <p className="text-sm font-medium text-blue-100">売上（請求済）</p>
-          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalSales)}</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{fmt(totalSales)}</p>
         </div>
         <div className="bg-slate-700 rounded-xl p-5 text-white shadow-sm">
           <p className="text-sm font-medium text-slate-300">原価（発生済）</p>
-          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalCosts)}</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{fmt(totalCosts)}</p>
         </div>
         <div className={`rounded-xl p-5 text-white shadow-sm ${totalProfit >= 0 ? 'bg-emerald-600' : 'bg-red-600'}`}>
           <p className={`text-sm font-medium ${totalProfit >= 0 ? 'text-emerald-100' : 'text-red-100'}`}>粗利</p>
-          <p className="text-3xl font-bold mt-2 tabular-nums">{formatYen(totalProfit)}</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{fmt(totalProfit)}</p>
         </div>
       </div>
     </>
@@ -217,10 +245,12 @@ function RankingContent({
   summaryPromise,
   overrideSummary,
   partners,
+  masked,
 }: {
   summaryPromise: Promise<DashboardSummary>
   overrideSummary: DashboardSummary | null
   partners: Partner[]
+  masked: boolean
 }) {
   const initialSummary = use(summaryPromise)
   const summary = overrideSummary ?? initialSummary
@@ -272,7 +302,7 @@ function RankingContent({
             <CardTitle className="text-base font-semibold text-slate-700">社員別 売上</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={staffSalesData} color="#3b82f6" />
+            <RankingChart data={staffSalesData} color="#3b82f6" masked={masked} />
           </CardContent>
         </Card>
         <Card className="bg-white shadow-sm border-0">
@@ -280,7 +310,7 @@ function RankingContent({
             <CardTitle className="text-base font-semibold text-slate-700">社員別 利益</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={staffProfitData} color="#22c55e" />
+            <RankingChart data={staffProfitData} color="#22c55e" masked={masked} />
           </CardContent>
         </Card>
       </div>
@@ -291,7 +321,7 @@ function RankingContent({
             <CardTitle className="text-base font-semibold text-slate-700">得意先別 Top20</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={customerRankingData} color="#f59e0b" />
+            <RankingChart data={customerRankingData} color="#f59e0b" masked={masked} />
           </CardContent>
         </Card>
         <Card className="bg-white shadow-sm border-0">
@@ -299,7 +329,7 @@ function RankingContent({
             <CardTitle className="text-base font-semibold text-slate-700">支払先別 Top20</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankingChart data={vendorRankingData} color="#8b5cf6" />
+            <RankingChart data={vendorRankingData} color="#8b5cf6" masked={masked} />
           </CardContent>
         </Card>
       </div>
@@ -331,28 +361,63 @@ function RankingSkeleton() {
 
 // ---- チャート ----
 
-function RankingChart({ data, color }: { data: { name: string; value: number }[]; color: string }) {
+function fmtBarLabel(v: number): string {
+  const abs = Math.abs(v)
+  const sign = v < 0 ? '-' : ''
+  if (abs >= 10_000_000) return `${sign}${Math.round(abs / 1_000_000)}M`
+  if (abs >= 1_000_000)  return `${sign}${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000)      return `${sign}${Math.round(abs / 1_000)}k`
+  return `${sign}${abs}`
+}
+
+function niceMax(dataMax: number): number {
+  if (dataMax <= 0) return 1
+  const rough = dataMax / 4
+  const exp = Math.pow(10, Math.floor(Math.log10(rough)))
+  const n = rough / exp
+  const steps = [1, 1.25, 2, 2.5, 4, 5, 10]
+  const nice = steps.find(s => s >= n) ?? 10
+  return nice * exp * 4
+}
+
+function RankingChart({ data, color, masked }: { data: { name: string; value: number }[]; color: string; masked: boolean }) {
   if (!data.length) return <p className="text-sm text-muted-foreground">データなし</p>
 
   const sorted     = [...data].sort((a, b) => b.value - a.value)
-  const height     = Math.max(200, sorted.length * 28)
+  const height     = Math.max(200, sorted.length * 32)
   const maxNameLen = Math.max(...sorted.map(d => d.name.length))
   const yAxisWidth = Math.min(Math.max(maxNameLen * 12, 100), 240)
   const gradId     = `grad-${color.replace('#', '')}`
 
+  const axisMax  = niceMax(sorted[0].value)
+  const axisTicks = [0, axisMax / 4, axisMax / 2, (axisMax * 3) / 4, axisMax]
+
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={sorted} layout="vertical" margin={{ left: 0, right: 40, top: 4, bottom: 4 }}>
+      <BarChart data={sorted} layout="vertical" margin={{ left: 0, right: 56, top: 4, bottom: 4 }}>
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor={color} stopOpacity={0.6} />
             <stop offset="100%" stopColor={color} stopOpacity={1} />
           </linearGradient>
         </defs>
-        <XAxis type="number" tickFormatter={v => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
+        <XAxis
+          type="number"
+          domain={[0, axisMax]}
+          ticks={axisTicks}
+          tickFormatter={masked ? () => '***' : v => `${(v / 10000).toFixed(0)}万`}
+          tick={{ fontSize: 11 }}
+        />
         <YAxis type="category" dataKey="name" width={yAxisWidth} tick={{ fontSize: 11 }} tickLine={false} />
-        <Tooltip formatter={(v: any) => [`¥${v.toLocaleString()}`, '金額']} />
-        <Bar dataKey="value" fill={`url(#${gradId})`} radius={[0, 3, 3, 0]} />
+        <Tooltip formatter={(v: any) => [masked ? '¥ ***' : `¥${v.toLocaleString()}`, '金額']} />
+        <Bar dataKey="value" fill={`url(#${gradId})`} radius={[0, 3, 3, 0]}>
+          <LabelList
+            dataKey="value"
+            position="right"
+            formatter={(v: any) => masked ? '***' : fmtBarLabel(v)}
+            style={{ fontSize: 11, fontWeight: 600, fill: '#374151' }}
+          />
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   )

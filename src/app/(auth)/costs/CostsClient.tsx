@@ -73,12 +73,15 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
 
   const today = new Date()
   const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-
   // 手動入力
   const [manualVendorId, setManualVendorId] = useState('')
   const [manualTaxType, setManualTaxType] = useState<TaxType>('税抜')
   const [manualProjectId, setManualProjectId] = useState('')
-  const [manualMonth, setManualMonth] = useState(currentMonthStr)
+  const [manualMonth, setManualMonth] = useState(
+    today.getMonth() === 0
+      ? `${today.getFullYear() - 1}-12`
+      : `${today.getFullYear()}-${String(today.getMonth()).padStart(2, '0')}`
+  )
   const [manualAmount, setManualAmount] = useState('')
   const [manualFile, setManualFile] = useState<File | null>(null)
   const [manualShowAll, setManualShowAll] = useState(false)
@@ -344,7 +347,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
     return Object.entries(map)
       .map(([vendor_id, { excl, tax, incl }]) => {
         const vendor = vendors.find(v => v.partner_id === vendor_id)
-        const participates = vendor?.safety_fee_rate != null
+        const participates = (vendor?.safety_fee_rate ?? 0) > 0
         const safetyFee = participates ? Math.floor(excl * safetyFeeRate / 100) : 0
         return { vendor_id, name: vendor?.name ?? vendorMap[vendor_id] ?? '(不明)', participates, amount: excl, tax, totalWithTax: incl, safetyFee, netPayment: incl - safetyFee }
       })

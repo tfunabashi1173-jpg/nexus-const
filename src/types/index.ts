@@ -104,6 +104,23 @@ export interface SessionUser {
 }
 
 // ==========================================
+// 監査ログ
+// ==========================================
+
+export interface AuditLog {
+  id: number
+  ts: string | null
+  ts_jst: string | null
+  user_id: string | null
+  user_name: string | null
+  role: string | null
+  action: string
+  target_table: string
+  target_key: string | null
+  detail: Record<string, any>
+}
+
+// ==========================================
 // アラート型
 // ==========================================
 

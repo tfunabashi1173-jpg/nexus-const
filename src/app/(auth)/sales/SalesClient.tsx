@@ -12,7 +12,8 @@ import { AmountInput } from '@/components/ui/amount-input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, Plus } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface Props {
   sales: Sale[]
@@ -29,6 +30,47 @@ export function SalesClient({ sales, projects }: Props) {
   const [deletedSaleIds, setDeletedSaleIds] = useState<Set<string>>(new Set())
   const unpaid = sales.filter(s => !s.deposit_status && !deletedSaleIds.has(s.sales_id))
   const paid = sales.filter(s => s.deposit_status && !deletedSaleIds.has(s.sales_id))
+
+  // 新規売上登録
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newProjectId, setNewProjectId] = useState('')
+  const [newBillingDate, setNewBillingDate] = useState('')
+  const [newRemarks, setNewRemarks] = useState('')
+  const [newAmount, setNewAmount] = useState('')
+
+  const activeProjects = projects.filter(p => p.status !== '入金済')
+
+  function addSale() {
+    if (!newProjectId || !newBillingDate || !newAmount) {
+      toast.error('現場・請求日・金額は必須です')
+      return
+    }
+    startTransition(async () => {
+      const res = await fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: newProjectId,
+          billing_date: newBillingDate,
+          remarks: newRemarks,
+          amount: parseInt(newAmount.replace(/,/g, '')) || 0,
+          deposit_status: false,
+          deposit_date: null,
+        }),
+      })
+      if (res.ok) {
+        toast.success('登録しました')
+        setNewProjectId('')
+        setNewBillingDate('')
+        setNewRemarks('')
+        setNewAmount('')
+        setShowNewForm(false)
+        router.refresh()
+      } else {
+        toast.error('登録に失敗しました')
+      }
+    })
+  }
 
   // 売上編集・削除
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null)
@@ -85,6 +127,16 @@ export function SalesClient({ sales, projects }: Props) {
     })
   }
 
+  // 入金履歴フィルタ
+  const now = new Date()
+  const [historyYear, setHistoryYear] = useState(now.getFullYear())
+  const [historyMonth, setHistoryMonth] = useState(now.getMonth() + 1)
+  const filteredPaid = paid.filter(s => {
+    if (!s.deposit_date) return false
+    const [y, m] = s.deposit_date.split('-').map(Number)
+    return y === historyYear && m === historyMonth
+  })
+
   // 入金消込状態
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [depositDate, setDepositDate] = useState('')
@@ -121,7 +173,50 @@ export function SalesClient({ sales, projects }: Props) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">売上・入金管理</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-900">売上・入金管理</h1>
+        <Button size="sm" onClick={() => setShowNewForm(v => !v)} variant={showNewForm ? 'outline' : 'default'}>
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          新規登録
+        </Button>
+      </div>
+
+      {showNewForm && (
+        <Card>
+          <CardContent className="pt-4 space-y-3">
+            <p className="text-sm font-medium">売上を登録</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="space-y-1 md:col-span-1">
+                <Label className="text-xs">現場 <span className="text-destructive">*</span></Label>
+                <Select value={newProjectId} onValueChange={v => setNewProjectId(v ?? '')}>
+                  <SelectTrigger><SelectValue placeholder="現場を選択" /></SelectTrigger>
+                  <SelectContent>
+                    {activeProjects.map(p => (
+                      <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">請求日 <span className="text-destructive">*</span></Label>
+                <Input type="date" value={newBillingDate} onChange={e => setNewBillingDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">名称・摘要</Label>
+                <Input value={newRemarks} onChange={e => setNewRemarks(e.target.value)} placeholder="例：第1回請求" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">金額（税抜）<span className="text-destructive">*</span></Label>
+                <AmountInput value={newAmount} onChange={setNewAmount} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={addSale} disabled={isPending}>登録</Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowNewForm(false)}>キャンセル</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="unpaid">
         <TabsList>
@@ -209,21 +304,48 @@ export function SalesClient({ sales, projects }: Props) {
         {/* 入金履歴 */}
         <TabsContent value="history">
           <Card>
-            <CardContent className="pt-4">
-              <div className="overflow-auto">
-                <table className="w-full text-sm">
+            <CardContent className="pt-4 space-y-3">
+              {/* 年月フィルタ */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  <button className="h-7 w-7 rounded border border-input flex items-center justify-center text-sm hover:bg-slate-100" onClick={() => setHistoryYear(v => v - 1)}>−</button>
+                  <span className="w-14 text-center text-sm font-medium">{historyYear}年</span>
+                  <button className="h-7 w-7 rounded border border-input flex items-center justify-center text-sm hover:bg-slate-100" onClick={() => setHistoryYear(v => v + 1)}>+</button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setHistoryMonth(m)}
+                      className={`h-7 px-2.5 rounded text-xs font-medium transition-colors ${historyMonth === m ? 'bg-blue-600 text-white' : 'border border-input hover:bg-slate-100'}`}
+                    >{m}月</button>
+                  ))}
+                </div>
+                <span className="text-xs text-slate-400 ml-auto">{filteredPaid.length}件</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm table-fixed min-w-[640px]">
+                  <colgroup>
+                    <col className="w-24" />
+                    <col className="w-64" />
+                    <col className="w-36" />
+                    <col className="w-32" />
+                    <col className="w-24" />
+                    <col className="w-16" />
+                  </colgroup>
                   <thead>
                     <tr className="bg-slate-800 text-white">
-                      <th className="text-left py-2.5 px-3 font-medium">請求日</th>
+                      <th className="text-left py-2.5 px-3 font-medium whitespace-nowrap">請求日</th>
                       <th className="text-left py-2.5 px-3 font-medium">現場名</th>
                       <th className="text-left py-2.5 px-3 font-medium">名称</th>
-                      <th className="text-right py-2.5 px-3 font-medium">金額</th>
-                      <th className="text-left py-2.5 px-3 font-medium">入金日</th>
+                      <th className="text-right py-2.5 px-3 font-medium whitespace-nowrap">金額</th>
+                      <th className="text-left py-2.5 px-3 font-medium whitespace-nowrap">入金日</th>
                       <th className="py-2.5 px-3"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paid.map((s, i) => (
+                    {filteredPaid.map((s, i) => (
                       editingSaleId === s.sales_id ? (
                         <tr key={s.sales_id} className="border-b bg-blue-50">
                           <td colSpan={6} className="py-3 px-3">
@@ -248,13 +370,13 @@ export function SalesClient({ sales, projects }: Props) {
                           </td>
                         </tr>
                       ) : (
-                        <tr key={s.sales_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
-                          <td className="py-2 pr-3">{s.billing_date?.slice(0, 7)}</td>
-                          <td className="py-2 pr-3">{projectMap[s.project_id] ?? '(不明)'}</td>
-                          <td className="py-2 pr-3">{s.remarks}</td>
-                          <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
-                          <td className="py-2">{s.deposit_date ?? '-'}</td>
-                          <td className="py-2 pr-3">
+                        <tr key={s.sales_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'} hover:bg-blue-50`}>
+                          <td className="py-2 px-3 whitespace-nowrap">{s.billing_date?.slice(0, 7)}</td>
+                          <td className="py-2 px-3 truncate max-w-0" title={projectMap[s.project_id] ?? '(不明)'}>{projectMap[s.project_id] ?? '(不明)'}</td>
+                          <td className="py-2 px-3 truncate max-w-0" title={s.remarks ?? ''}>{s.remarks}</td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap">{formatYenFull(s.amount)}</td>
+                          <td className="py-2 px-3 whitespace-nowrap">{s.deposit_date ?? '-'}</td>
+                          <td className="py-2 px-3">
                             <div className="flex justify-end gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startSaleEdit(s)} disabled={isPending}>
                                 <Pencil className="h-3.5 w-3.5" />
@@ -267,8 +389,8 @@ export function SalesClient({ sales, projects }: Props) {
                         </tr>
                       )
                     ))}
-                    {paid.length === 0 && (
-                      <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">データなし</td></tr>
+                    {filteredPaid.length === 0 && (
+                      <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">該当データなし</td></tr>
                     )}
                   </tbody>
                 </table>
