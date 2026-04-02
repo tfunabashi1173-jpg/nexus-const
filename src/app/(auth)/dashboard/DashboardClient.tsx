@@ -23,6 +23,7 @@ import {
 } from 'recharts'
 import { AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
+import Link from 'next/link'
 
 interface Props {
   projects: Project[]
@@ -144,13 +145,19 @@ export function DashboardClient({ projects, addons, partners, initialSummary, fi
           <AlertDescription>
             <div className="flex flex-wrap gap-3 mt-1">
               {alerts.orphaned_costs > 0 && (
-                <span>⚠️ 現場不明原価: <strong>{alerts.orphaned_costs}件</strong></span>
+                <Link href="/costs" className="underline underline-offset-2 hover:opacity-80">
+                  ⚠️ 現場不明原価: <strong>{alerts.orphaned_costs}件</strong> →確認・割り当て
+                </Link>
               )}
               {alerts.unpaid_sales > 0 && (
-                <span>💰 未入金: <strong>{alerts.unpaid_sales}件</strong></span>
+                <Link href="/sales" className="underline underline-offset-2 hover:opacity-80">
+                  💰 未入金: <strong>{alerts.unpaid_sales}件</strong> →入金消込
+                </Link>
               )}
               {alerts.unbilled_costs > 0 && (
-                <span>📋 未請求現場: <strong>{alerts.unbilled_costs}件</strong></span>
+                <Link href="/projects" className="underline underline-offset-2 hover:opacity-80">
+                  📋 未請求現場: <strong>{alerts.unbilled_costs}件</strong> →工事一覧
+                </Link>
               )}
             </div>
           </AlertDescription>

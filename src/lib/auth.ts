@@ -37,14 +37,14 @@ export async function getSession(): Promise<SessionUser | null> {
   return verifySession(token)
 }
 
-export async function setSessionCookie(user: SessionUser) {
+export async function setSessionCookie(user: SessionUser, rememberMe = false) {
   const token = await createSession(user)
   const cookieStore = await cookies()
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: COOKIE_MAX_AGE,
+    ...(rememberMe ? { maxAge: COOKIE_MAX_AGE } : {}),
     path: '/',
   })
 }

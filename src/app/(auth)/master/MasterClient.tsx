@@ -36,6 +36,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
   // 取引先追加フォーム
   const [newPartnerName, setNewPartnerName] = useState('')
   const [newPartnerCategory, setNewPartnerCategory] = useState<string>('得意先')
+  const [newDefaultTaxType, setNewDefaultTaxType] = useState<string>('税抜')
   const [newClosingDay, setNewClosingDay] = useState('')
   const [newPaymentCycle, setNewPaymentCycle] = useState('')
   const [newPaymentDay, setNewPaymentDay] = useState('')
@@ -88,6 +89,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
         body: JSON.stringify({
           name: newPartnerName,
           category: newPartnerCategory,
+          default_tax_type: newDefaultTaxType,
           closing_day: newClosingDay ? parseInt(newClosingDay) : null,
           payment_cycle: newPaymentCycle ? parseInt(newPaymentCycle) : null,
           payment_day: newPaymentDay ? parseInt(newPaymentDay) : null,
@@ -95,7 +97,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
       })
       if (res.ok) {
         toast.success('取引先を登録しました')
-        setNewPartnerName(''); setNewClosingDay(''); setNewPaymentCycle(''); setNewPaymentDay('')
+        setNewPartnerName(''); setNewDefaultTaxType('税抜'); setNewClosingDay(''); setNewPaymentCycle(''); setNewPaymentDay('')
         router.refresh()
       } else {
         const { error } = await res.json()
@@ -225,6 +227,9 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                           <th className="text-center py-2.5 px-3 font-medium">入金月</th>
                           <th className="text-center py-2.5 px-3 font-medium">入金日</th>
                         </>}
+                        {cat !== '得意先' && (
+                          <th className="text-center py-2.5 px-3 font-medium">税区分</th>
+                        )}
                         <th className="py-2.5 px-3"></th>
                       </tr>
                     </thead>
@@ -237,6 +242,13 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                             <td className="py-2 pr-3 text-center">{p.payment_cycle}ヶ月後</td>
                             <td className="py-2 pr-3 text-center">{p.payment_day === 99 ? '末日' : p.payment_day}日</td>
                           </>}
+                          {cat !== '得意先' && (
+                            <td className="py-2 pr-3 text-center">
+                              <Badge variant={p.default_tax_type === '免税' ? 'outline' : p.default_tax_type === '税込' ? 'secondary' : 'default'} className="text-xs">
+                                {p.default_tax_type ?? '税抜'}
+                              </Badge>
+                            </td>
+                          )}
                           <td className="py-2 text-right">
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deletePartner(p.partner_id)} disabled={isPending}>
                               <Trash2 className="h-3.5 w-3.5" />
@@ -257,6 +269,19 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                       <Label className="text-xs">名称</Label>
                       <Input value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} />
                     </div>
+                    {cat !== '得意先' && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">デフォルト税区分</Label>
+                        <Select value={newDefaultTaxType} onValueChange={v => setNewDefaultTaxType(v ?? '税抜')}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="税抜">税抜（別途消費税）</SelectItem>
+                            <SelectItem value="税込">税込（内税）</SelectItem>
+                            <SelectItem value="免税">免税（インボイス未登録）</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     {cat === '得意先' && <>
                       <div className="space-y-1.5">
                         <Label className="text-xs">締日（99=末日）</Label>

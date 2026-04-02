@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { fetchCosts, fetchPartners, fetchProjects } from '@/lib/db'
+import { fetchCosts, fetchPartners, fetchProjects, getSystemSetting } from '@/lib/db'
 import { normalizeCompanyName } from '@/lib/utils/text'
 import { CostsClient } from './CostsClient'
 
@@ -9,10 +9,11 @@ export const metadata: Metadata = {
 }
 
 export default async function CostsPage() {
-  const [costs, partners, projects] = await Promise.all([
+  const [costs, partners, projects, safetyFeeRateStr] = await Promise.all([
     fetchCosts(),
     fetchPartners(),
     fetchProjects(),
+    getSystemSetting('SAFETY_FEE_RATE', '0.5'),
   ])
 
   const VENDOR_CATEGORY_ORDER = ['協力業者', '仕入先', '経費']
@@ -23,5 +24,5 @@ export default async function CostsPage() {
       return ci !== 0 ? ci : normalizeCompanyName(a.name).localeCompare(normalizeCompanyName(b.name), 'ja')
     })
 
-  return <CostsClient costs={costs} vendors={vendors} projects={projects} />
+  return <CostsClient costs={costs} vendors={vendors} projects={projects} safetyFeeRate={parseFloat(safetyFeeRateStr) || 0} />
 }

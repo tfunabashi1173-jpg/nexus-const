@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs'
 export async function login(formData: FormData) {
   const userId = formData.get('userId') as string
   const password = formData.get('password') as string
+  const rememberMe = formData.get('rememberMe') === 'on'
 
   if (!userId || !password) {
     return { error: 'IDとパスワードを入力してください' }
@@ -42,7 +43,7 @@ export async function login(formData: FormData) {
     user_id: data.user_id,
     username: data.username,
     role: data.role,
-  })
+  }, rememberMe)
 
   redirect('/dashboard')
 }

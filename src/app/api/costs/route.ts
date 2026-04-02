@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     const vendorId = form.get('vendor_id') as string
     const billingMonth = form.get('billing_month') as string
     const amount = parseInt(form.get('amount') as string)
+    const taxType = (form.get('tax_type') as string) || '税抜'
     const targetDate = form.get('target_date') as string | null
 
     let filePath: string | null = null
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       vendor_id: vendorId,
       billing_month: billingMonth,
       amount,
+      tax_type: taxType as any,
       file_path: filePath,
     })
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })

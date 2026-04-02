@@ -50,6 +50,12 @@ export default function LoginPage() {
                 required
               />
             </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="rememberMe" name="rememberMe" className="h-4 w-4 rounded border-input accent-primary" />
+              <label htmlFor="rememberMe" className="text-sm text-muted-foreground select-none cursor-pointer">
+                ログイン状態を保持する（30日間）
+              </label>
+            </div>
             {state?.error && (
               <p className="text-sm text-destructive">{state.error}</p>
             )}

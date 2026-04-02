@@ -12,6 +12,7 @@ import { AmountInput } from '@/components/ui/amount-input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import { Pencil, Trash2 } from 'lucide-react'
 
 interface Props {
   sales: Sale[]
@@ -25,8 +26,64 @@ export function SalesClient({ sales, projects }: Props) {
   const projectMap = Object.fromEntries(projects.map(p => [p.project_id, p.site_name]))
   const depositDateMap = Object.fromEntries(projects.map(p => [p.project_id, p.scheduled_deposit_date]))
 
-  const unpaid = sales.filter(s => !s.deposit_status)
-  const paid = sales.filter(s => s.deposit_status)
+  const [deletedSaleIds, setDeletedSaleIds] = useState<Set<string>>(new Set())
+  const unpaid = sales.filter(s => !s.deposit_status && !deletedSaleIds.has(s.sales_id))
+  const paid = sales.filter(s => s.deposit_status && !deletedSaleIds.has(s.sales_id))
+
+  // 売上編集・削除
+  const [editingSaleId, setEditingSaleId] = useState<string | null>(null)
+  const [editBillingDate, setEditBillingDate] = useState('')
+  const [editSaleAmount, setEditSaleAmount] = useState('')
+  const [editRemarks, setEditRemarks] = useState('')
+
+  function startSaleEdit(s: Sale) {
+    setEditingSaleId(s.sales_id)
+    setEditBillingDate(s.billing_date ?? '')
+    setEditSaleAmount(String(s.amount))
+    setEditRemarks(s.remarks ?? '')
+  }
+
+  function cancelSaleEdit() { setEditingSaleId(null) }
+
+  function saveSaleEdit() {
+    if (!editingSaleId) return
+    startTransition(async () => {
+      const res = await fetch('/api/sales', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingSaleId,
+          billing_date: editBillingDate,
+          amount: parseInt(editSaleAmount.replace(/,/g, '')) || 0,
+          remarks: editRemarks,
+        }),
+      })
+      if (res.ok) {
+        toast.success('更新しました')
+        setEditingSaleId(null)
+        router.refresh()
+      } else {
+        toast.error('更新に失敗しました')
+      }
+    })
+  }
+
+  function deleteSale(id: string) {
+    if (!window.confirm('この売上データを削除しますか？')) return
+    startTransition(async () => {
+      const res = await fetch('/api/sales', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) {
+        setDeletedSaleIds(prev => new Set([...prev, id]))
+        toast.success('削除しました')
+      } else {
+        toast.error('削除に失敗しました')
+      }
+    })
+  }
 
   // 入金消込状態
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -89,6 +146,7 @@ export function SalesClient({ sales, projects }: Props) {
                           <th className="text-left py-2.5 px-3 font-medium">名称</th>
                           <th className="text-right py-2.5 px-3 font-medium">金額</th>
                           <th className="text-left py-2.5 px-3 font-medium">入金予定日</th>
+                          <th className="py-2.5 px-3"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -106,6 +164,11 @@ export function SalesClient({ sales, projects }: Props) {
                             <td className="py-2 pr-3">{s.remarks}</td>
                             <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
                             <td className="py-2">{depositDateMap[s.project_id] ?? '-'}</td>
+                            <td className="py-2 pr-3 text-right" onClick={e => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteSale(s.sales_id)} disabled={isPending}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -156,20 +219,56 @@ export function SalesClient({ sales, projects }: Props) {
                       <th className="text-left py-2.5 px-3 font-medium">名称</th>
                       <th className="text-right py-2.5 px-3 font-medium">金額</th>
                       <th className="text-left py-2.5 px-3 font-medium">入金日</th>
+                      <th className="py-2.5 px-3"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {paid.map((s, i) => (
-                      <tr key={s.sales_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
-                        <td className="py-2 pr-3">{s.billing_date?.slice(0, 7)}</td>
-                        <td className="py-2 pr-3">{projectMap[s.project_id] ?? '(不明)'}</td>
-                        <td className="py-2 pr-3">{s.remarks}</td>
-                        <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
-                        <td className="py-2">{s.deposit_date ?? '-'}</td>
-                      </tr>
+                      editingSaleId === s.sales_id ? (
+                        <tr key={s.sales_id} className="border-b bg-blue-50">
+                          <td colSpan={6} className="py-3 px-3">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                              <div>
+                                <Label className="text-xs">請求日</Label>
+                                <Input type="date" value={editBillingDate} onChange={e => setEditBillingDate(e.target.value)} className="h-8 text-sm" />
+                              </div>
+                              <div>
+                                <Label className="text-xs">金額</Label>
+                                <AmountInput value={editSaleAmount} onChange={setEditSaleAmount} className="h-8 text-sm" />
+                              </div>
+                              <div>
+                                <Label className="text-xs">名称</Label>
+                                <Input value={editRemarks} onChange={e => setEditRemarks(e.target.value)} className="h-8 text-sm" />
+                              </div>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <Button size="sm" onClick={saveSaleEdit} disabled={isPending}>保存</Button>
+                              <Button size="sm" variant="ghost" onClick={cancelSaleEdit}>キャンセル</Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={s.sales_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                          <td className="py-2 pr-3">{s.billing_date?.slice(0, 7)}</td>
+                          <td className="py-2 pr-3">{projectMap[s.project_id] ?? '(不明)'}</td>
+                          <td className="py-2 pr-3">{s.remarks}</td>
+                          <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
+                          <td className="py-2">{s.deposit_date ?? '-'}</td>
+                          <td className="py-2 pr-3">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startSaleEdit(s)} disabled={isPending}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteSale(s.sales_id)} disabled={isPending}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
                     ))}
                     {paid.length === 0 && (
-                      <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">データなし</td></tr>
+                      <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">データなし</td></tr>
                     )}
                   </tbody>
                 </table>

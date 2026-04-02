@@ -25,6 +25,7 @@ export interface Partner {
   name: string
   category: '得意先' | '協力業者' | '仕入先' | '経費'
   safety_fee_rate: number | null
+  default_tax_type: '税抜' | '税込' | '免税'
   closing_day: number | null
   payment_cycle: number | null
   payment_day: number | null
@@ -44,12 +45,15 @@ export interface Sale {
   deleted_at: string | null
 }
 
+export type TaxType = '税抜' | '税込' | '免税'
+
 export interface Cost {
   cost_id: string
   project_id: string | null
   vendor_id: string
   billing_month: string
   amount: number
+  tax_type: TaxType
   file_path: string | null
   is_deleted: boolean | null
   deleted_at: string | null
