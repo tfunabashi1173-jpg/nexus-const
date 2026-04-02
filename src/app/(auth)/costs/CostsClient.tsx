@@ -28,8 +28,13 @@ interface OcrResult {
   date: string
   details: InvoiceDetail[]
   matched_vendor?: string
-  matched_project?: string
   possible_duplicate?: { billing_month: string; amount: number }
+}
+
+interface SiteGroup {
+  site_name: string   // OCR抽出の現場名
+  amount: number      // 現場の小計
+  project_id: string  // マッチング済み or 手動選択
 }
 
 export function CostsClient({ costs, vendors, projects }: Props) {
@@ -74,7 +79,7 @@ export function CostsClient({ costs, vendors, projects }: Props) {
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrVendorId, setOcrVendorId] = useState('')
-  const [ocrProjectId, setOcrProjectId] = useState('')
+  const [ocrSiteGroups, setOcrSiteGroups] = useState<SiteGroup[]>([])
   const [ocrMonth, setOcrMonth] = useState('')
 
   function submitManual() {
@@ -146,16 +151,18 @@ export function CostsClient({ costs, vendors, projects }: Props) {
       // 日付から請求月を設定
       if (data.date) setOcrMonth(data.date.slice(0, 7))
 
-      // 現場名の自動マッチング（明細の現場名で最頻出のものを使用）
+      // 現場別にグループ化してそれぞれマッチング
       const projectCandidates = projects.map(p => ({ id: p.project_id, name: p.site_name }))
-      const siteNames: string[] = (data.details ?? [])
-        .map((d: InvoiceDetail) => d.site_name)
-        .filter((s: string) => s && s !== '(不明)')
-      const freq: Record<string, number> = {}
-      siteNames.forEach((s: string) => { freq[s] = (freq[s] ?? 0) + 1 })
-      const dominantSite = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0]
-      const projectMatch = dominantSite ? findSimilarMatch(dominantSite, projectCandidates) : null
-      if (projectMatch) setOcrProjectId(projectMatch.id)
+      const groupMap: Record<string, number> = {}
+      for (const d of (data.details ?? []) as InvoiceDetail[]) {
+        const key = d.site_name || '(不明)'
+        groupMap[key] = (groupMap[key] ?? 0) + d.amount
+      }
+      const groups: SiteGroup[] = Object.entries(groupMap).map(([site_name, amount]) => {
+        const pm = site_name !== '(不明)' ? findSimilarMatch(site_name, projectCandidates) : null
+        return { site_name, amount, project_id: pm?.id ?? '' }
+      })
+      setOcrSiteGroups(groups)
 
       // 重複登録チェック（同業者×同請求月が既に存在するか）
       const billingMonth = data.date ? (data.date as string).slice(0, 7) : null
@@ -166,7 +173,6 @@ export function CostsClient({ costs, vendors, projects }: Props) {
       setOcrResult({
         ...data,
         matched_vendor: match ? vendorMap[match.id] : undefined,
-        matched_project: projectMatch ? projects.find(p => p.project_id === projectMatch.id)?.site_name : undefined,
         possible_duplicate: duplicate
           ? { billing_month: duplicate.billing_month?.slice(0, 7) ?? '', amount: duplicate.amount }
           : undefined,
@@ -184,42 +190,49 @@ export function CostsClient({ costs, vendors, projects }: Props) {
       toast.error('業者・請求月を確認してください')
       return
     }
-
-    const totalAmount = ocrResult.details.reduce((s, d) => s + d.amount, 0)
+    if (ocrSiteGroups.length === 0) {
+      toast.error('明細がありません')
+      return
+    }
 
     startTransition(async () => {
-      const form = new FormData()
-      if (ocrFile) form.append('file', ocrFile)
-      form.append('project_id', ocrProjectId || '')
-      form.append('vendor_id', ocrVendorId)
-      form.append('billing_month', ocrMonth + '-01')
-      form.append('amount', String(totalAmount))
-      form.append('target_date', ocrMonth + '-01')
-
-      const res = ocrFile
-        ? await fetch('/api/costs', { method: 'POST', body: form })
-        : await fetch('/api/costs', {
+      // 現場ごとに1件ずつ登録。証憑ファイルは最初の1件にのみ添付。
+      const results = await Promise.all(
+        ocrSiteGroups.map((group, i) => {
+          if (i === 0 && ocrFile) {
+            const form = new FormData()
+            form.append('file', ocrFile)
+            form.append('project_id', group.project_id || '')
+            form.append('vendor_id', ocrVendorId)
+            form.append('billing_month', ocrMonth + '-01')
+            form.append('amount', String(group.amount))
+            form.append('target_date', ocrMonth + '-01')
+            return fetch('/api/costs', { method: 'POST', body: form })
+          }
+          return fetch('/api/costs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              project_id: ocrProjectId || null,
+              project_id: group.project_id || null,
               vendor_id: ocrVendorId,
               billing_month: ocrMonth + '-01',
-              amount: totalAmount,
+              amount: group.amount,
             }),
           })
+        })
+      )
 
-      if (res.ok) {
-        toast.success('原価を登録しました')
+      const allOk = results.every(r => r.ok)
+      if (allOk) {
+        toast.success(`${ocrSiteGroups.length}件の原価を登録しました`)
         setOcrResult(null)
         setOcrFile(null)
         setOcrVendorId('')
-        setOcrProjectId('')
+        setOcrSiteGroups([])
         setOcrMonth('')
         router.refresh()
       } else {
-        const { error } = await res.json()
-        toast.error(`登録エラー: ${error}`)
+        toast.error('一部の登録に失敗しました')
       }
     })
   }
@@ -333,17 +346,13 @@ export function CostsClient({ costs, vendors, projects }: Props) {
 
               {ocrResult && (
                 <div className="border-t pt-4 space-y-4">
+                  {/* 解析サマリー */}
                   <div className="bg-muted/50 rounded p-3 space-y-1">
                     <p className="text-sm font-medium">解析結果</p>
                     <p className="text-sm">請求元: <strong>{ocrResult.company}</strong></p>
                     <p className="text-sm">請求日: {ocrResult.date}</p>
                     {ocrResult.matched_vendor && (
                       <p className="text-sm text-green-600">✅ 業者自動マッチング: {ocrResult.matched_vendor}</p>
-                    )}
-                    {ocrResult.matched_project ? (
-                      <p className="text-sm text-green-600">✅ 現場自動マッチング: {ocrResult.matched_project}</p>
-                    ) : (
-                      <p className="text-sm text-amber-600">⚠️ 現場を手動で選択してください</p>
                     )}
                     {ocrResult.possible_duplicate && (
                       <p className="text-sm text-red-600 font-medium">
@@ -352,33 +361,57 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                     )}
                   </div>
 
-                  {/* 明細 */}
-                  <div className="overflow-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-1.5 pr-3 font-medium text-muted-foreground">現場名</th>
-                          <th className="text-left py-1.5 pr-3 font-medium text-muted-foreground">摘要</th>
-                          <th className="text-right py-1.5 font-medium text-muted-foreground">金額</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ocrResult.details.map((d, i) => (
-                          <tr key={i} className="border-b last:border-0">
-                            <td className="py-1.5 pr-3">{d.site_name}</td>
-                            <td className="py-1.5 pr-3">{d.description}</td>
-                            <td className="py-1.5 text-right">{formatYenFull(d.amount)}</td>
+                  {/* 現場別振り当て（登録単位） */}
+                  <div>
+                    <p className="text-sm font-medium mb-2">現場別振り当て <span className="text-muted-foreground font-normal">（現場ごとに1件登録されます）</span></p>
+                    <div className="overflow-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-800 text-white">
+                            <th className="text-left py-2 px-3 font-medium">請求書の現場名</th>
+                            <th className="text-right py-2 px-3 font-medium">小計</th>
+                            <th className="text-left py-2 px-3 font-medium">振り当て工事</th>
                           </tr>
-                        ))}
-                        <tr className="font-bold">
-                          <td colSpan={2} className="py-1.5 pr-3">合計</td>
-                          <td className="py-1.5 text-right">{formatYenFull(ocrResult.details.reduce((s, d) => s + d.amount, 0))}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {ocrSiteGroups.map((group, i) => (
+                            <tr key={i} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                              <td className="py-2 px-3 text-muted-foreground">{group.site_name}</td>
+                              <td className="py-2 px-3 text-right whitespace-nowrap">{formatYenFull(group.amount)}</td>
+                              <td className="py-2 px-3">
+                                <Select
+                                  value={group.project_id || '__none__'}
+                                  onValueChange={(v) => setOcrSiteGroups(prev =>
+                                    prev.map((g, j) => j === i ? { ...g, project_id: v === '__none__' ? '' : (v ?? '') } : g)
+                                  )}
+                                >
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <span className={group.project_id ? '' : 'text-muted-foreground'}>
+                                      {group.project_id
+                                        ? (projects.find(p => p.project_id === group.project_id)?.site_name ?? group.project_id)
+                                        : '⚠️ 未選択'}
+                                    </span>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">（現場不明）</SelectItem>
+                                    {projects.map(p => <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="font-bold border-t">
+                            <td className="py-2 px-3">合計</td>
+                            <td className="py-2 px-3 text-right">{formatYenFull(ocrSiteGroups.reduce((s, g) => s + g.amount, 0))}</td>
+                            <td />
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* 業者・請求月 */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label>業者 <span className="text-destructive">*</span></Label>
                       <Select value={ocrVendorId} onValueChange={(v) => setOcrVendorId(v ?? "")}>
@@ -393,26 +426,14 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>現場</Label>
-                      <Select value={ocrProjectId} onValueChange={(v) => setOcrProjectId(v ?? "")}>
-                        <SelectTrigger>
-                          <span className={ocrProjectId ? '' : 'text-muted-foreground'}>
-                            {ocrProjectId ? (projects.find(p => p.project_id === ocrProjectId)?.site_name ?? ocrProjectId) : '現場を選択（任意）'}
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">（現場不明）</SelectItem>
-                          {projects.map(p => <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
                       <Label>請求月 <span className="text-destructive">*</span></Label>
                       <Input type="month" value={ocrMonth} onChange={e => setOcrMonth(e.target.value)} />
                     </div>
                   </div>
 
-                  <Button onClick={submitOcr} disabled={isPending}>登録する</Button>
+                  <Button onClick={submitOcr} disabled={isPending}>
+                    {ocrSiteGroups.length > 1 ? `${ocrSiteGroups.length}件まとめて登録` : '登録する'}
+                  </Button>
                 </div>
               )}
             </CardContent>
