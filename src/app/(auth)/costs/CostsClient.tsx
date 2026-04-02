@@ -217,7 +217,11 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                 <div className="space-y-1.5">
                   <Label>業者 <span className="text-destructive">*</span></Label>
                   <Select value={manualVendorId} onValueChange={(v) => setManualVendorId(v ?? "")}>
-                    <SelectTrigger><SelectValue placeholder="業者を選択" /></SelectTrigger>
+                    <SelectTrigger>
+                      <span className={manualVendorId ? '' : 'text-muted-foreground'}>
+                        {manualVendorId ? normalizeCompanyName(vendorMap[manualVendorId] ?? manualVendorId) : '業者を選択'}
+                      </span>
+                    </SelectTrigger>
                     <SelectContent>
                       {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
                     </SelectContent>
@@ -342,7 +346,11 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                     <div className="space-y-1.5">
                       <Label>業者 <span className="text-destructive">*</span></Label>
                       <Select value={ocrVendorId} onValueChange={(v) => setOcrVendorId(v ?? "")}>
-                        <SelectTrigger><SelectValue placeholder="業者を選択" /></SelectTrigger>
+                        <SelectTrigger>
+                          <span className={ocrVendorId ? '' : 'text-muted-foreground'}>
+                            {ocrVendorId ? normalizeCompanyName(vendorMap[ocrVendorId] ?? ocrVendorId) : '業者を選択'}
+                          </span>
+                        </SelectTrigger>
                         <SelectContent>
                           {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
                         </SelectContent>
@@ -351,7 +359,11 @@ export function CostsClient({ costs, vendors, projects }: Props) {
                     <div className="space-y-1.5">
                       <Label>現場</Label>
                       <Select value={ocrProjectId} onValueChange={(v) => setOcrProjectId(v ?? "")}>
-                        <SelectTrigger><SelectValue placeholder="現場を選択（任意）" /></SelectTrigger>
+                        <SelectTrigger>
+                          <span className={ocrProjectId ? '' : 'text-muted-foreground'}>
+                            {ocrProjectId ? (projects.find(p => p.project_id === ocrProjectId)?.site_name ?? ocrProjectId) : '現場を選択（任意）'}
+                          </span>
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="">（現場不明）</SelectItem>
                           {projects.map(p => <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>)}
