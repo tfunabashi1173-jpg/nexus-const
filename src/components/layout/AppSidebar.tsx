@@ -195,7 +195,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           </button>
         </form>
 
-        <p className="text-xs text-center text-slate-600 pt-1">v2.0.0</p>
+        <p className="text-xs text-center text-slate-600 pt-1">v2.0.0 ({process.env.NEXT_PUBLIC_COMMIT_SHA})</p>
       </div>
     </aside>
   )
