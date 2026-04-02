@@ -13,11 +13,12 @@ export default async function MasterPage() {
   const session = await getSession()
   if (!session || session.role !== 'admin') redirect('/dashboard')
 
-  const [users, partners, fiscalStartMonth, safetyFeeRate] = await Promise.all([
+  const [users, partners, fiscalStartMonth, safetyFeeRate, geminiModel] = await Promise.all([
     fetchUsers(),
     fetchPartners(),
     getSystemSetting('FISCAL_START_MONTH', '4'),
     getSystemSetting('SAFETY_FEE_RATE', '0.5'),
+    getSystemSetting('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'),
   ])
 
   return (
@@ -26,6 +27,7 @@ export default async function MasterPage() {
       partners={partners}
       fiscalStartMonth={fiscalStartMonth}
       safetyFeeRate={safetyFeeRate}
+      geminiModel={geminiModel}
     />
   )
 }

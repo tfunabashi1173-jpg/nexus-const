@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { getSystemSetting } from '@/lib/db'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export async function POST(req: NextRequest) {
@@ -14,8 +15,9 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: 'Gemini APIキーが未設定です' }, { status: 500 })
 
+    const geminiModel = await getSystemSetting('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview')
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite-preview' })
+    const model = genAI.getGenerativeModel({ model: geminiModel })
 
     const fileBuffer = Buffer.from(await file.arrayBuffer())
     const base64 = fileBuffer.toString('base64')

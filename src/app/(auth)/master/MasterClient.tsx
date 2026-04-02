@@ -18,11 +18,12 @@ interface Props {
   partners: Partner[]
   fiscalStartMonth: string
   safetyFeeRate: string
+  geminiModel: string
 }
 
 const PARTNER_CATEGORIES = ['得意先', '協力会社', '仕入先', '経費'] as const
 
-export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate }: Props) {
+export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate, geminiModel }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -42,6 +43,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate 
   // システム設定
   const [fiscalMonth, setFiscalMonth] = useState(fiscalStartMonth)
   const [safetyRate, setSafetyRate] = useState(safetyFeeRate)
+  const [geminiModelValue, setGeminiModelValue] = useState(geminiModel)
 
   function addUser() {
     if (!newUserId || !newUsername || !newPassword) {
@@ -119,7 +121,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate 
       const res = await fetch('/api/master/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fiscalStartMonth: fiscalMonth, safetyFeeRate: safetyRate }),
+        body: JSON.stringify({ fiscalStartMonth: fiscalMonth, safetyFeeRate: safetyRate, geminiModel: geminiModelValue }),
       })
       if (res.ok) {
         toast.success('設定を保存しました')
@@ -301,6 +303,10 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate 
                 <div className="space-y-1.5">
                   <Label>安全協力会費率（%）</Label>
                   <Input type="number" step="0.1" value={safetyRate} onChange={e => setSafetyRate(e.target.value)} />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label>Gemini モデル（AI-OCR）</Label>
+                  <Input value={geminiModelValue} onChange={e => setGeminiModelValue(e.target.value)} placeholder="gemini-3.1-flash-lite-preview" />
                 </div>
               </div>
               <Button onClick={saveSettings} disabled={isPending}>保存</Button>
