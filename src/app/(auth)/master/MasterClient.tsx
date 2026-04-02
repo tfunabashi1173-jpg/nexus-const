@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Trash2, Plus, Pencil, Check, X, Download, Search } from 'lucide-react'
+import { Trash2, Plus, Pencil, Check, X, Download, Search, Eye, EyeOff } from 'lucide-react'
 
 interface Props {
   users: User[]
@@ -38,6 +38,66 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
   const [editUsername, setEditUsername] = useState('')
   const [editPassword, setEditPassword] = useState('')
   const [editRole, setEditRole] = useState<'admin' | 'user'>('user')
+  const [showEditPw, setShowEditPw] = useState(false)
+  const [showNewPw, setShowNewPw] = useState(false)
+
+  // ユーザー全編集モード
+  type BulkUserRow = { username: string; password: string; role: string }
+  const [bulkEditUsers, setBulkEditUsers] = useState(false)
+  const [bulkUserEdits, setBulkUserEdits] = useState<Record<string, BulkUserRow>>({})
+  const [bulkUserSaving, setBulkUserSaving] = useState(false)
+  const [showBulkPw, setShowBulkPw] = useState(false)
+
+  function startBulkEditUsers() {
+    const init: Record<string, BulkUserRow> = {}
+    users.forEach(u => { init[u.user_id] = { username: u.username, password: '', role: u.role } })
+    setBulkUserEdits(init)
+    setBulkEditUsers(true)
+    setEditingId(null)
+  }
+
+  function cancelBulkEditUsers() {
+    setBulkEditUsers(false)
+    setBulkUserEdits({})
+    setShowBulkPw(false)
+  }
+
+  function setBulkUserField(id: string, field: keyof BulkUserRow, value: string) {
+    setBulkUserEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  async function saveAllBulkUsers() {
+    const changed = users.filter(u => {
+      const e = bulkUserEdits[u.user_id]
+      if (!e) return false
+      return e.username !== u.username || e.password !== '' || e.role !== u.role
+    })
+    if (changed.length === 0) { toast('変更はありません'); cancelBulkEditUsers(); return }
+
+    setBulkUserSaving(true)
+    let failed = 0
+    await Promise.all(changed.map(async u => {
+      const e = bulkUserEdits[u.user_id]
+      const body: Record<string, string> = {}
+      if (e.username !== u.username) body.username = e.username
+      if (e.password) body.password = e.password
+      if (e.role !== u.role) body.role = e.role
+      const res = await fetch(`/api/master/users/${u.user_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) failed++
+    }))
+    setBulkUserSaving(false)
+    if (failed === 0) {
+      toast.success(`${changed.length}件を更新しました`)
+      cancelBulkEditUsers()
+      router.refresh()
+    } else {
+      toast.error(`${failed}件の更新に失敗しました`)
+    }
+  }
 
   function startEdit(u: User) {
     setEditingId(u.user_id)
@@ -75,6 +135,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
   // 取引先編集
   const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null)
   const [editPartnerName, setEditPartnerName] = useState('')
+  const [editCategory, setEditCategory] = useState('')
   const [editDefaultTaxType, setEditDefaultTaxType] = useState('')
   const [editClosingDay, setEditClosingDay] = useState('')
   const [editPaymentCycle, setEditPaymentCycle] = useState('')
@@ -82,10 +143,12 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
   const [editSafetyMember, setEditSafetyMember] = useState(false)
 
   const SAFETY_CATS = ['協力業者', '仕入先']
+  const CHANGEABLE_CATS = ['協力業者', '仕入先', '経費']
 
   function startEditPartner(p: Partner) {
     setEditingPartnerId(p.partner_id)
     setEditPartnerName(p.name)
+    setEditCategory(p.category)
     setEditDefaultTaxType(p.default_tax_type ?? '税抜')
     setEditClosingDay(p.closing_day != null ? String(p.closing_day) : '')
     setEditPaymentCycle(p.payment_cycle != null ? String(p.payment_cycle) : '')
@@ -93,18 +156,20 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
     setEditSafetyMember((p.safety_fee_rate ?? 0) > 0)
   }
 
-  function saveEditPartner(id: string, cat: string) {
+  function saveEditPartner(id: string) {
     startTransition(async () => {
-      const body: Record<string, any> = { name: editPartnerName }
-      if (cat !== '得意先') {
+      const body: Record<string, any> = { name: editPartnerName, category: editCategory }
+      if (editCategory !== '得意先') {
         body.default_tax_type = editDefaultTaxType
       } else {
         if (editClosingDay) body.closing_day = parseInt(editClosingDay)
         if (editPaymentCycle) body.payment_cycle = parseInt(editPaymentCycle)
         if (editPaymentDay) body.payment_day = parseInt(editPaymentDay)
       }
-      if (SAFETY_CATS.includes(cat)) {
+      if (SAFETY_CATS.includes(editCategory)) {
         body.safety_fee_rate = editSafetyMember ? 1 : null
+      } else {
+        body.safety_fee_rate = null
       }
       const res = await fetch(`/api/master/partners/${id}`, {
         method: 'PATCH',
@@ -323,6 +388,77 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
 
   const partnersByCategory = (cat: string) => partners.filter(p => p.category === cat)
 
+  // 全編集モード
+  type BulkRow = { name: string; category: string; defaultTaxType: string; safetyMember: boolean }
+  const [bulkEditCat, setBulkEditCat] = useState<string | null>(null)
+  const [bulkEdits, setBulkEdits] = useState<Record<string, BulkRow>>({})
+  const [bulkSaving, setBulkSaving] = useState(false)
+
+  function startBulkEdit(cat: string) {
+    const init: Record<string, BulkRow> = {}
+    partnersByCategory(cat).forEach(p => {
+      init[p.partner_id] = {
+        name: p.name,
+        category: p.category,
+        defaultTaxType: p.default_tax_type ?? '税抜',
+        safetyMember: (p.safety_fee_rate ?? 0) > 0,
+      }
+    })
+    setBulkEdits(init)
+    setBulkEditCat(cat)
+    setEditingPartnerId(null)
+  }
+
+  function cancelBulkEdit() {
+    setBulkEditCat(null)
+    setBulkEdits({})
+  }
+
+  function setBulkField(id: string, field: keyof BulkRow, value: string | boolean) {
+    setBulkEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  async function saveAllBulk(cat: string) {
+    const rows = partnersByCategory(cat)
+    const changed = rows.filter(p => {
+      const e = bulkEdits[p.partner_id]
+      if (!e) return false
+      return (
+        e.name !== p.name ||
+        e.category !== p.category ||
+        e.defaultTaxType !== (p.default_tax_type ?? '税抜') ||
+        e.safetyMember !== ((p.safety_fee_rate ?? 0) > 0)
+      )
+    })
+    if (changed.length === 0) { toast('変更はありません'); cancelBulkEdit(); return }
+
+    setBulkSaving(true)
+    let failed = 0
+    await Promise.all(changed.map(async p => {
+      const e = bulkEdits[p.partner_id]
+      const body: Record<string, any> = { name: e.name, category: e.category, default_tax_type: e.defaultTaxType }
+      if (SAFETY_CATS.includes(e.category)) {
+        body.safety_fee_rate = e.safetyMember ? 1 : null
+      } else {
+        body.safety_fee_rate = null
+      }
+      const res = await fetch(`/api/master/partners/${p.partner_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) failed++
+    }))
+    setBulkSaving(false)
+    if (failed === 0) {
+      toast.success(`${changed.length}件を更新しました`)
+      cancelBulkEdit()
+      router.refresh()
+    } else {
+      toast.error(`${failed}件の更新に失敗しました`)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">⚙️ マスタ管理</h1>
@@ -342,6 +478,30 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
         <TabsContent value="users">
           <Card>
             <CardContent className="pt-4 space-y-4">
+              {/* 全編集スイッチ */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">{users.length}件</span>
+                {bulkEditUsers ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm" variant="ghost"
+                      onClick={() => setShowBulkPw(v => !v)}
+                      className="h-7 gap-1 text-xs text-slate-500"
+                    >
+                      {showBulkPw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      {showBulkPw ? 'PW非表示' : 'PW表示'}
+                    </Button>
+                    <Button size="sm" onClick={saveAllBulkUsers} disabled={bulkUserSaving}>
+                      {bulkUserSaving ? '保存中...' : '全て保存'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={cancelBulkEditUsers} disabled={bulkUserSaving}>キャンセル</Button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={startBulkEditUsers} disabled={!!editingId}>
+                    まとめて編集
+                  </Button>
+                )}
+              </div>
               <div className="overflow-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -357,13 +517,62 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                     {users.map((u, i) => (
                       <tr key={u.user_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 px-3 font-mono text-xs">{u.user_id}</td>
-                        {editingId === u.user_id ? (
+                        {bulkEditUsers ? (
+                          /* 全編集モード行 */
+                          <>
+                            <td className="py-1.5 px-3">
+                              <Input
+                                value={bulkUserEdits[u.user_id]?.username ?? u.username}
+                                onChange={e => setBulkUserField(u.user_id, 'username', e.target.value)}
+                                className="h-7 text-sm w-32"
+                              />
+                            </td>
+                            <td className="py-1.5 px-3">
+                              <Input
+                                type={showBulkPw ? 'text' : 'password'}
+                                value={bulkUserEdits[u.user_id]?.password ?? ''}
+                                onChange={e => setBulkUserField(u.user_id, 'password', e.target.value)}
+                                placeholder="変更する場合のみ"
+                                className="h-7 text-sm w-40"
+                              />
+                            </td>
+                            <td className="py-1.5 px-3">
+                              <Select
+                                value={bulkUserEdits[u.user_id]?.role ?? u.role}
+                                onValueChange={v => setBulkUserField(u.user_id, 'role', v ?? u.role)}
+                              >
+                                <SelectTrigger className="h-7 text-sm w-24"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="user">user</SelectItem>
+                                  <SelectItem value="admin">admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-1.5 px-3"></td>
+                          </>
+                        ) : editingId === u.user_id ? (
+                          /* 個別編集モード行 */
                           <>
                             <td className="py-1.5 px-3">
                               <Input value={editUsername} onChange={e => setEditUsername(e.target.value)} className="h-7 text-sm w-32" />
                             </td>
                             <td className="py-1.5 px-3">
-                              <Input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="変更する場合のみ" className="h-7 text-sm w-40" />
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type={showEditPw ? 'text' : 'password'}
+                                  value={editPassword}
+                                  onChange={e => setEditPassword(e.target.value)}
+                                  placeholder="変更する場合のみ"
+                                  className="h-7 text-sm w-36"
+                                />
+                                <button
+                                  type="button"
+                                  className="text-slate-400 hover:text-slate-700"
+                                  onClick={() => setShowEditPw(v => !v)}
+                                >
+                                  {showEditPw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
                             </td>
                             <td className="py-1.5 px-3">
                               <Select value={editRole} onValueChange={(v: any) => setEditRole(v)}>
@@ -378,12 +587,13 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600" onClick={() => saveEdit(u.user_id)} disabled={isPending}>
                                 <Check className="h-3.5 w-3.5" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelEdit} disabled={isPending}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { cancelEdit(); setShowEditPw(false) }} disabled={isPending}>
                                 <X className="h-3.5 w-3.5" />
                               </Button>
                             </td>
                           </>
                         ) : (
+                          /* 表示モード行 */
                           <>
                             <td className="py-2 px-3">{u.username}</td>
                             <td className="py-2 px-3 text-slate-400 text-xs">••••••••</td>
@@ -391,7 +601,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                               <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>{u.role}</Badge>
                             </td>
                             <td className="py-2 px-3 text-right whitespace-nowrap">
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500" onClick={() => startEdit(u)} disabled={isPending}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500" onClick={() => { startEdit(u); setShowEditPw(false) }} disabled={isPending}>
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteUser(u.user_id)} disabled={isPending}>
@@ -418,7 +628,12 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">パスワード</Label>
-                    <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                    <div className="flex items-center gap-1">
+                      <Input type={showNewPw ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                      <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => setShowNewPw(v => !v)}>
+                        {showNewPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">権限</Label>
@@ -442,6 +657,22 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
           <TabsContent key={cat} value={cat}>
             <Card>
               <CardContent className="pt-4 space-y-4">
+                {/* 全編集スイッチ */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">{partnersByCategory(cat).length}件</span>
+                  {bulkEditCat === cat ? (
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => saveAllBulk(cat)} disabled={bulkSaving}>
+                        {bulkSaving ? '保存中...' : '全て保存'}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={cancelBulkEdit} disabled={bulkSaving}>キャンセル</Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => startBulkEdit(cat)} disabled={!!editingPartnerId}>
+                      まとめて編集
+                    </Button>
+                  )}
+                </div>
                 <div className="overflow-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -464,10 +695,74 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                     <tbody>
                       {partnersByCategory(cat).map((p, i) => (
                         <tr key={p.partner_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
-                          {editingPartnerId === p.partner_id ? (
+                          {bulkEditCat === cat ? (
+                            /* 全編集モード行 */
                             <>
                               <td className="py-1.5 px-3">
-                                <Input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} className="h-7 text-sm w-40" />
+                                <div className="flex items-center gap-1.5">
+                                  <Input
+                                    value={bulkEdits[p.partner_id]?.name ?? p.name}
+                                    onChange={e => setBulkField(p.partner_id, 'name', e.target.value)}
+                                    className="h-7 text-sm w-36"
+                                  />
+                                  {CHANGEABLE_CATS.includes(cat) && (
+                                    <Select
+                                      value={bulkEdits[p.partner_id]?.category ?? cat}
+                                      onValueChange={v => setBulkField(p.partner_id, 'category', v ?? cat)}
+                                    >
+                                      <SelectTrigger className="h-7 text-sm w-28"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        {CHANGEABLE_CATS.map(c => (
+                                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                </div>
+                              </td>
+                              {cat !== '得意先' && (
+                                <td className="py-1.5 px-3">
+                                  <Select
+                                    value={bulkEdits[p.partner_id]?.defaultTaxType ?? '税抜'}
+                                    onValueChange={v => setBulkField(p.partner_id, 'defaultTaxType', v ?? '税抜')}
+                                  >
+                                    <SelectTrigger className="h-7 text-sm w-24"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="税抜">税抜</SelectItem>
+                                      <SelectItem value="税込">税込</SelectItem>
+                                      <SelectItem value="免税">免税</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+                              )}
+                              {SAFETY_CATS.includes(cat) && (
+                                <td className="py-1.5 px-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={bulkEdits[p.partner_id]?.safetyMember ?? false}
+                                    onChange={e => setBulkField(p.partner_id, 'safetyMember', e.target.checked)}
+                                    className="h-4 w-4 accent-primary"
+                                  />
+                                </td>
+                              )}
+                              <td className="py-1.5 px-3"></td>
+                            </>
+                          ) : editingPartnerId === p.partner_id ? (
+                            <>
+                              <td className="py-1.5 px-3">
+                                <div className="flex items-center gap-1.5">
+                                  <Input value={editPartnerName} onChange={e => setEditPartnerName(e.target.value)} className="h-7 text-sm w-36" />
+                                  {CHANGEABLE_CATS.includes(cat) && (
+                                    <Select value={editCategory} onValueChange={v => setEditCategory(v ?? cat)}>
+                                      <SelectTrigger className="h-7 text-sm w-28"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        {CHANGEABLE_CATS.map(c => (
+                                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                </div>
                               </td>
                               {cat === '得意先' ? (
                                 <>
@@ -499,7 +794,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                                 </td>
                               )}
                               <td className="py-1.5 px-3 text-right whitespace-nowrap">
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600" onClick={() => saveEditPartner(p.partner_id, cat)} disabled={isPending}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600" onClick={() => saveEditPartner(p.partner_id)} disabled={isPending}>
                                   <Check className="h-3.5 w-3.5" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingPartnerId(null)} disabled={isPending}>

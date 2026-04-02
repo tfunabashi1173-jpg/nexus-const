@@ -624,6 +624,37 @@ export async function getEvidenceSignedUrl(filePath: string): Promise<string | n
 }
 
 // ==========================================
+// Purge (論理削除から30日経過したレコードを物理削除)
+// ==========================================
+export async function purgeDeleted(): Promise<{ purged: Record<string, number>; errors: string[] }> {
+  const threshold = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const purged: Record<string, number> = {}
+  const errors: string[] = []
+
+  const tables: { table: string; pk: string }[] = [
+    { table: 'costs',    pk: 'cost_id' },
+    { table: 'sales',    pk: 'sales_id' },
+    { table: 'addons',   pk: 'addon_id' },
+    { table: 'projects', pk: 'project_id' },
+    { table: 'partners', pk: 'partner_id' },
+    { table: 'users',    pk: 'user_id' },
+  ]
+
+  for (const { table, pk } of tables) {
+    const { data, error } = await supabase()
+      .from(table)
+      .delete()
+      .eq('is_deleted', true)
+      .lt('deleted_at', threshold)
+      .select(pk)
+    if (error) errors.push(`${table}: ${error.message}`)
+    purged[table] = data?.length ?? 0
+  }
+
+  return { purged, errors }
+}
+
+// ==========================================
 // Auto Status Update
 // ==========================================
 export async function autoUpdateStatuses(): Promise<{ updated: boolean; message: string }> {
