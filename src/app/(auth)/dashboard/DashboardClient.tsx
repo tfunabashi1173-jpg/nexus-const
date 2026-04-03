@@ -25,7 +25,6 @@ import {
 } from 'recharts'
 import { AlertTriangle, EyeOff, Eye } from 'lucide-react'
 import { toast } from 'sonner'
-import Link from 'next/link'
 
 interface Props {
   projects: Project[]
