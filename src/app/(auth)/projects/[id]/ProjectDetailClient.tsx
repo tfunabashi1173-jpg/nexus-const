@@ -633,8 +633,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
   const [extraMonths, setExtraMonths] = useState<string[]>([])
   const [addingMonth, setAddingMonth] = useState(false)
   const _now = new Date()
-  const [monthPickYear, setMonthPickYear] = useState(_now.getFullYear())
-  const [monthPickMonth, setMonthPickMonth] = useState(_now.getMonth() + 1)
+  const [monthPickValue, setMonthPickValue] = useState(`${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`)
   const [hoveredRow, setHoveredRow] = useState<string | null>(null)
   const [hoveredMonth, setHoveredMonth] = useState<string | null>(null)
   const months = [...new Set([...dbMonths, ...extraMonths])].sort()
@@ -750,9 +749,9 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     else toast.error('アップロードに失敗しました')
   }
 
-  function addMonthColumn() {
-    const m = `${monthPickYear}-${String(monthPickMonth).padStart(2, '0')}`
-    if (!months.includes(m)) setExtraMonths(prev => [...prev, m])
+  function addMonthColumn(value?: string) {
+    const m = value ?? monthPickValue
+    if (m && !months.includes(m)) setExtraMonths(prev => [...prev, m])
     setAddingMonth(false)
   }
 
@@ -816,22 +815,15 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
             </button>
           )}
           {addingMonth ? (
-            <div className="flex flex-col gap-2 bg-slate-50 border rounded p-2">
-              <div className="flex items-center gap-1.5">
-                <button className="h-6 w-6 rounded border border-input flex items-center justify-center text-xs hover:bg-slate-100" onClick={() => setMonthPickYear(y => y - 1)}>−</button>
-                <span className="w-14 text-center text-sm font-medium tabular-nums">{monthPickYear}年</span>
-                <button className="h-6 w-6 rounded border border-input flex items-center justify-center text-xs hover:bg-slate-100" onClick={() => setMonthPickYear(y => y + 1)}>+</button>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                  <button key={m} onClick={() => setMonthPickMonth(m)} className={`h-7 w-9 rounded text-xs font-medium transition-colors ${monthPickMonth === m ? 'bg-blue-600 text-white' : 'border border-input hover:bg-slate-100'}`}>{m}月</button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2 pt-0.5">
-                <span className="text-xs text-muted-foreground">{monthPickYear}-{String(monthPickMonth).padStart(2, '0')} を追加</span>
-                <button onClick={addMonthColumn} className="text-xs text-blue-600 font-medium hover:underline">追加</button>
-                <button onClick={() => setAddingMonth(false)} className="text-xs text-muted-foreground hover:text-foreground">キャンセル</button>
-              </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="month"
+                className="border rounded px-2 py-1 text-sm"
+                value={monthPickValue}
+                onChange={e => { setMonthPickValue(e.target.value); if (e.target.value) addMonthColumn(e.target.value) }}
+                autoFocus
+              />
+              <button onClick={() => setAddingMonth(false)} className="text-xs text-muted-foreground hover:text-foreground">キャンセル</button>
             </div>
           ) : (
             <button onClick={() => setAddingMonth(true)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
@@ -960,36 +952,15 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
         </div>
         <div className="flex items-center gap-2">
           {addingMonth ? (
-            <div className="flex flex-col gap-2 bg-slate-50 border rounded p-2">
-              {/* 年選択 */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  className="h-6 w-6 rounded border border-input flex items-center justify-center text-xs hover:bg-slate-100"
-                  onClick={() => setMonthPickYear(y => y - 1)}
-                >−</button>
-                <span className="w-14 text-center text-sm font-medium tabular-nums">{monthPickYear}年</span>
-                <button
-                  className="h-6 w-6 rounded border border-input flex items-center justify-center text-xs hover:bg-slate-100"
-                  onClick={() => setMonthPickYear(y => y + 1)}
-                >+</button>
-              </div>
-              {/* 月選択 */}
-              <div className="flex flex-wrap gap-1">
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                  <button
-                    key={m}
-                    onClick={() => setMonthPickMonth(m)}
-                    className={`h-7 w-9 rounded text-xs font-medium transition-colors ${monthPickMonth === m ? 'bg-blue-600 text-white' : 'border border-input hover:bg-slate-100'}`}
-                  >{m}月</button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2 pt-0.5">
-                <span className="text-xs text-muted-foreground">
-                  {monthPickYear}-{String(monthPickMonth).padStart(2, '0')} を追加
-                </span>
-                <button onClick={addMonthColumn} className="text-xs text-blue-600 font-medium hover:underline">追加</button>
-                <button onClick={() => setAddingMonth(false)} className="text-xs text-muted-foreground hover:text-foreground">キャンセル</button>
-              </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="month"
+                className="border rounded px-2 py-1 text-sm"
+                value={monthPickValue}
+                onChange={e => { setMonthPickValue(e.target.value); if (e.target.value) addMonthColumn(e.target.value) }}
+                autoFocus
+              />
+              <button onClick={() => setAddingMonth(false)} className="text-xs text-muted-foreground hover:text-foreground">キャンセル</button>
             </div>
           ) : (
             <button
