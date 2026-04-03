@@ -629,6 +629,8 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
   const _now = new Date()
   const [monthPickYear, setMonthPickYear] = useState(_now.getFullYear())
   const [monthPickMonth, setMonthPickMonth] = useState(_now.getMonth() + 1)
+  const [hoveredRow, setHoveredRow] = useState<string | null>(null)
+  const [hoveredMonth, setHoveredMonth] = useState<string | null>(null)
   const months = [...new Set([...dbMonths, ...extraMonths])].sort()
 
   // 業者一覧（合計降順）＋ユーザーが追加した業者
@@ -777,7 +779,10 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
               <th className="text-left py-2 pr-4 font-medium text-muted-foreground whitespace-nowrap sticky left-0 bg-background">業者</th>
               <th className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">合計</th>
               {months.map(m => (
-                <th key={m} className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">{m}</th>
+                <th
+                  key={m}
+                  className={`text-right py-2 px-3 font-medium whitespace-nowrap transition-colors ${hoveredMonth === m ? 'bg-blue-100 text-blue-700' : 'text-muted-foreground'}`}
+                >{m}</th>
               ))}
             </tr>
           </thead>
@@ -786,32 +791,45 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
               <td className="py-2 pr-4 sticky left-0 bg-muted/30">合計</td>
               <td className="py-2 px-3 text-right">{fmtAmt(grandTotal)}</td>
               {months.map(m => (
-                <td key={m} className="py-2 px-3 text-right whitespace-nowrap">{fmtAmt(monthTotal(m))}</td>
+                <td key={m} className={`py-2 px-3 text-right whitespace-nowrap transition-colors ${hoveredMonth === m ? 'bg-blue-50' : ''}`}>{fmtAmt(monthTotal(m))}</td>
               ))}
             </tr>
             {vendors.map(vid => {
               const name = partnerMap[vid] ?? '(不明)'
               const shortName = normalizeCompanyName(name)
+              const isRowHovered = hoveredRow === vid
               return (
-                <tr key={vid} className="border-b last:border-0 hover:bg-muted/30">
-                  <td className="py-2 pr-4 whitespace-nowrap sticky left-0 bg-background" title={name}>{shortName}</td>
-                  <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{fmtAmt(vendorTotals[vid])}</td>
+                <tr
+                  key={vid}
+                  className="border-b last:border-0"
+                  onMouseEnter={() => setHoveredRow(vid)}
+                  onMouseLeave={() => setHoveredRow(null)}
+                >
+                  <td
+                    className={`py-2 pr-4 whitespace-nowrap sticky left-0 transition-colors font-medium ${isRowHovered ? 'bg-amber-50 text-amber-800' : 'bg-background text-foreground'}`}
+                    title={name}
+                  >{shortName}</td>
+                  <td className={`py-2 px-3 text-right font-medium whitespace-nowrap transition-colors ${isRowHovered ? 'bg-amber-50' : ''}`}>{fmtAmt(vendorTotals[vid])}</td>
                   {months.map(m => {
                     const records = pivot[vid]?.[m] ?? []
                     const total = records.reduce((s, c) => s + c.amount, 0)
+                    const isColHovered = hoveredMonth === m
                     return (
                       <td
                         key={m}
-                        className="py-2 px-3 text-right whitespace-nowrap cursor-pointer hover:bg-blue-50 hover:text-blue-700 rounded"
+                        className={`py-2 px-3 text-right whitespace-nowrap cursor-pointer transition-colors rounded
+                          ${isRowHovered && isColHovered ? 'bg-blue-200 text-blue-900' : isRowHovered ? 'bg-amber-50' : isColHovered ? 'bg-blue-50 text-blue-700' : 'hover:bg-blue-50 hover:text-blue-700'}`}
+                        onMouseEnter={() => setHoveredMonth(m)}
+                        onMouseLeave={() => setHoveredMonth(null)}
                         onClick={() => {
                           setDialog({ vendor_id: vid, month: m })
                           setNewAmount('')
                           const init: Record<string, string> = {}
-                          records.forEach(c => { init[c.cost_id] = c.amount.toLocaleString() })
+                          records.forEach(c => { init[c.cost_id] = c.amount.toLocaleString('ja-JP') })
                           setEditAmounts(init)
                         }}
                       >
-                        {records.length > 0 ? fmtAmt(total) : <span className="text-muted-foreground">—</span>}
+                        {records.length > 0 ? fmtAmt(total) : <span className="text-muted-foreground/40">—</span>}
                       </td>
                     )
                   })}
