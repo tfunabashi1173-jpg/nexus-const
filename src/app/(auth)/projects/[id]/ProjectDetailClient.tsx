@@ -857,9 +857,9 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
             </tr>
           </thead>
           <tbody>
-            <tr className="font-bold bg-muted/30">
-              <td className="py-2 pr-2 sticky left-0 bg-muted/30 w-[128px] min-w-[128px] border-b">合計</td>
-              <td className="py-2 px-3 text-right sticky left-[128px] bg-muted/30 border-r border-b">{fmtAmt(grandTotal)}</td>
+            <tr className="font-bold bg-slate-100">
+              <td className="py-2 pr-2 sticky left-0 bg-slate-100 w-[128px] min-w-[128px] border-b">合計</td>
+              <td className="py-2 px-3 text-right sticky left-[128px] bg-slate-100 border-r border-b">{fmtAmt(grandTotal)}</td>
               {months.map(m => (
                 <td key={m} className={`py-2 px-3 text-right whitespace-nowrap transition-colors border-b ${hoveredMonth === m ? 'bg-blue-50' : ''}`}>{fmtAmt(monthTotal(m))}</td>
               ))}
