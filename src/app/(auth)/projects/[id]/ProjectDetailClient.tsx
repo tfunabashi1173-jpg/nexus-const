@@ -592,6 +592,14 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
   const [preview, setPreview] = useState<{ url: string; isPdf: boolean } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
+  // ピボットテーブルのスクロールコンテナ（初期位置を右端に）
+  const pivotScrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (pivotScrollRef.current) {
+      pivotScrollRef.current.scrollLeft = pivotScrollRef.current.scrollWidth
+    }
+  }, [])
+
   // ダイアログ表示時に最初の金額欄へ自動フォーカス
   const firstEditRef = useRef<HTMLInputElement>(null)
   const newAmountRef = useRef<HTMLInputElement>(null)
@@ -784,7 +792,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
           📥 Excel出力
         </Button>
       </div>
-      <div className="overflow-auto">
+      <div className="overflow-auto" ref={pivotScrollRef}>
         <table className="border-collapse" style={{ fontSize: '10px' }}>
           <thead>
             <tr className="border-b">
