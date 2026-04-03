@@ -654,7 +654,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     .sort((a, b) => {
       const catDiff = (VENDOR_CATEGORY_ORDER[a.category] ?? 99) - (VENDOR_CATEGORY_ORDER[b.category] ?? 99)
       if (catDiff !== 0) return catDiff
-      return a.name.localeCompare(b.name, 'ja')
+      return normalizeCompanyName(a.name).localeCompare(normalizeCompanyName(b.name), 'ja')
     })
 
   // ピボット: [vendor_id][month] = Cost[]
