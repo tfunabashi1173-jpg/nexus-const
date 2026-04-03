@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Trash2, Save, ExternalLink, X, Plus, Paperclip, ImageIcon } from 'lucide-react'
+import { Trash2, Save, ExternalLink, X, Plus, Paperclip, ImageIcon, AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface Props {
   project: Project
@@ -251,6 +252,17 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
           <KpiCard label="原価合計" value={formatYenFull(costsSum)} />
           <KpiCard label="予想粗利" value={formatYenFull(profit)} highlight={profit >= 0} />
         </div>
+
+        {/* 予算超過アラート */}
+        {costsSum > totalContract && (
+          <Alert variant="destructive" className="mb-3">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              原価合計（{formatYenFull(costsSum)}）が契約金額（{formatYenFull(totalContract)}）を
+              <strong> {formatYenFull(costsSum - totalContract)} 超過</strong>しています。
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* 進捗バー */}
         <div className="space-y-1">

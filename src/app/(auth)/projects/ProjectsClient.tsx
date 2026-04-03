@@ -105,8 +105,8 @@ export function ProjectsClient({ projects, customers }: Props) {
         </Select>
       </div>
 
-      {/* 一覧 */}
-      <div className="overflow-auto rounded-lg shadow-sm border-0 bg-white">
+      {/* 一覧（デスクトップ: テーブル） */}
+      <div className="hidden md:block overflow-auto rounded-lg shadow-sm border-0 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-800 text-white sticky top-0 z-10">
@@ -154,6 +154,32 @@ export function ProjectsClient({ projects, customers }: Props) {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* 一覧（モバイル: カード型） */}
+      <div className="md:hidden space-y-2">
+        {filtered.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">該当する現場はありません</p>
+        ) : (
+          filtered.map(p => (
+            <Link key={p.project_id} href={`/projects/${p.project_id}`} className="block bg-white rounded-lg border p-4 hover:bg-blue-50 transition-colors">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <p className="font-semibold text-base leading-tight">{p.site_name}</p>
+                <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[p.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                  {p.status}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 font-mono mb-2">{p.project_id}</p>
+              <div className="flex justify-between items-end">
+                <div className="space-y-0.5 text-xs text-slate-500">
+                  <p>{customerMap[p.customer_id] ?? '(不明)'} / {p.manager_name}</p>
+                  <p>{p.start_date?.slice(0, 7)} 〜 {p.end_date?.slice(0, 7)}</p>
+                </div>
+                <p className="text-sm font-semibold tabular-nums">{formatYenFull(p.contract_amount)}</p>
+              </div>
+            </Link>
+          ))
+        )}
       </div>
     </div>
   )

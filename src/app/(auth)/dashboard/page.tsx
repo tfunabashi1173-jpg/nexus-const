@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { fetchProjects, fetchAllAddons, fetchPartners, getDashboardSummary, getSystemSetting } from '@/lib/db'
+import { fetchProjects, fetchAllAddons, fetchPartners, fetchSales, fetchCosts, getDashboardSummary, getSystemSetting } from '@/lib/db'
 import { getFiscalYear, getFiscalYearRange } from '@/lib/utils/date'
 import { perfStart } from '@/lib/perf'
 import { DashboardClient } from './DashboardClient'
@@ -22,10 +22,12 @@ export default async function DashboardPage() {
   // summaryPromise は await しない → Suspense でストリーミング
   const summaryPromise = getDashboardSummary(fyStart, fyEnd)
 
-  const [projects, addons, partners] = await Promise.all([
+  const [projects, addons, partners, sales, costs] = await Promise.all([
     fetchProjects(),   // 稼働中現場表示・追加工事金額用
     fetchAllAddons(),  // 稼働中現場の追加工事金額用
     fetchPartners(),   // キャッシュ済み。ランキング名前解決用
+    fetchSales(),      // 入金遅延アラート用
+    fetchCosts(),      // 予算超過アラート用
   ])
   end()
 
@@ -34,6 +36,8 @@ export default async function DashboardPage() {
       projects={projects}
       addons={addons}
       partners={partners}
+      sales={sales}
+      costs={costs}
       summaryPromise={summaryPromise}
       fiscalStartMonth={fiscalStartMonth}
     />

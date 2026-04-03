@@ -19,11 +19,13 @@ import {
   RefreshCw,
   Trash2,
   ClipboardList,
+  Menu,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { useTransition } from 'react'
+import { useTransition, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 const navItems = [
@@ -60,6 +62,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [isOpen, setIsOpen] = useState(false)
 
   const today = new Date()
   const dateStr = format(today, 'yyyy年MM月dd日(E)', { locale: ja })
@@ -78,8 +81,33 @@ export function AppSidebar({ user }: AppSidebarProps) {
     })
   }
 
+  // ページ遷移時にサイドバーを閉じる
+  useEffect(() => { setIsOpen(false) }, [pathname])
+
   return (
-    <aside className="fixed top-0 left-0 w-56 h-screen bg-slate-900 flex flex-col z-40 overflow-hidden">
+    <>
+      {/* ハンバーガーボタン（モバイルのみ） */}
+      <button
+        className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-md bg-slate-900 text-white shadow-md"
+        onClick={() => setIsOpen(v => !v)}
+        aria-label="メニューを開く"
+      >
+        {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </button>
+
+      {/* オーバーレイ（モバイルのみ） */}
+      {isOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
+    <aside className={cn(
+      'fixed top-0 left-0 w-56 h-screen bg-slate-900 flex flex-col z-40 overflow-hidden transition-transform duration-200',
+      'md:translate-x-0',
+      isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+    )}>
       {/* ヘッダー */}
       <div className="px-5 py-5 border-b border-slate-700">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-0.5">NEXUS</p>
@@ -198,5 +226,6 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <p className="text-xs text-center text-slate-600 pt-1">v{process.env.NEXT_PUBLIC_APP_VERSION} ({process.env.NEXT_PUBLIC_COMMIT_SHA})</p>
       </div>
     </aside>
+    </>
   )
 }
