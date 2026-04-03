@@ -101,7 +101,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
 
   // 売上登録フォーム
   const [saleDate, setSaleDate] = useState('')
-  const [saleRemarks, setSaleRemarks] = useState('')
+  const [saleRemarks, setSaleRemarks] = useState(project.site_name)
   const [saleAmount, setSaleAmount] = useState('')
 
   const partnerMap = Object.fromEntries(partners.map(p => [p.partner_id, p.name]))
@@ -220,7 +220,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
       })
       if (res.ok) {
         toast.success('請求を登録しました')
-        setSaleDate(''); setSaleRemarks(''); setSaleAmount('')
+        setSaleDate(''); setSaleRemarks(project.site_name); setSaleAmount('')
         router.refresh()
       } else {
         toast.error('登録に失敗しました')
