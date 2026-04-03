@@ -1,22 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { purgeDeleted } from '@/lib/db'
+import { purgeDeleted, autoUpdateStatuses } from '@/lib/db'
+import { revalidateTag } from 'next/cache'
 
-// Vercel Cron または外部 cron から呼び出される
+// Vercel Cron から毎日呼び出される（vercel.json で設定）
 // Authorization: Bearer <CRON_SECRET> で保護
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
   if (!secret) {
-    console.error('[cron/purge] CRON_SECRET is not configured')
+    console.error('[cron] CRON_SECRET is not configured')
     return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
   }
   if (req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { purged, errors } = await purgeDeleted()
-  const total = Object.values(purged).reduce((s, n) => s + n, 0)
+  const [statusResult, purgeResult] = await Promise.all([
+    autoUpdateStatuses(),
+    purgeDeleted(),
+  ])
 
-  console.log('[cron/purge]', { purged, errors, total })
+  if (statusResult.updated) {
+    revalidateTag('projects', {})
+    revalidateTag('dashboard', {})
+  }
 
-  return NextResponse.json({ purged, errors, total })
+  const purgeTotal = Object.values(purgeResult.purged).reduce((s, n) => s + n, 0)
+  console.log('[cron] auto-status:', statusResult)
+  console.log('[cron] purge:', { ...purgeResult, total: purgeTotal })
+
+  return NextResponse.json({ statusResult, purgeResult: { ...purgeResult, total: purgeTotal } })
 }

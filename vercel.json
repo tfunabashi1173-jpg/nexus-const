@@ -2,10 +2,6 @@
   "crons": [
     {
       "path": "/api/cron/purge",
-      "schedule": "0 17 * * *"
-    },
-    {
-      "path": "/api/cron/auto-status",
       "schedule": "5 15 * * *"
     }
   ]
