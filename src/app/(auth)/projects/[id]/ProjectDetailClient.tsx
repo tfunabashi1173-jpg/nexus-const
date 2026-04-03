@@ -670,7 +670,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     (pivot[vid]?.[m] ?? []).reduce((s, c) => s + c.amount, 0)
   const monthTotal = (m: string) =>
     vendors.reduce((s, vid) => s + cellTotal(vid, m), 0)
-  const grandTotal = vendors.reduce((s, vid) => s + vendorTotals[vid], 0)
+  const grandTotal = vendors.reduce((s, vid) => s + (vendorTotals[vid] ?? 0), 0)
 
   const dialogRecords = dialog ? (pivot[dialog.vendor_id]?.[dialog.month] ?? []) : []
 
@@ -770,7 +770,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
         ['合計', grandTotal, ...months.map(m => monthTotal(m))],
         ...vendors.map(vid => [
           partnerMap[vid] ?? '(不明)',
-          vendorTotals[vid],
+          vendorTotals[vid] ?? 0,
           ...months.map(m => cellTotal(vid, m)),
         ]),
       ]
@@ -887,7 +887,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                     className={`py-2 pr-2 whitespace-nowrap sticky left-0 transition-colors font-medium w-[128px] min-w-[128px] overflow-hidden text-ellipsis ${isLast ? '' : 'border-b'} ${isRowHovered ? 'bg-amber-50 text-amber-800' : 'bg-background text-foreground'}`}
                     title={name}
                   >{shortName}</td>
-                  <td className={`py-2 px-3 text-right font-medium whitespace-nowrap sticky left-[128px] transition-colors border-r ${isLast ? '' : 'border-b'} ${isRowHovered ? 'bg-amber-50' : 'bg-background'}`}>{fmtAmt(vendorTotals[vid])}</td>
+                  <td className={`py-2 px-3 text-right font-medium whitespace-nowrap sticky left-[128px] transition-colors border-r ${isLast ? '' : 'border-b'} ${isRowHovered ? 'bg-amber-50' : 'bg-background'}`}>{fmtAmt(vendorTotals[vid] ?? 0)}</td>
                   {months.map(m => {
                     const records = pivot[vid]?.[m] ?? []
                     const total = records.reduce((s, c) => s + c.amount, 0)
