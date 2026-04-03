@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useRef, useEffect } from 'react'
 import { Project, Cost, Sale, Addon, Partner, User, ProjectSubManager } from '@/types'
 import { formatYenFull, formatDateLocal } from '@/lib/utils/date'
 import { AmountInput } from '@/components/ui/amount-input'
@@ -574,6 +574,12 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
 
 const fmtAmt = (v: number) => Math.round(v).toLocaleString()
 
+function fmtAmountInput(raw: string): string {
+  const digits = raw.replace(/[^0-9]/g, '')
+  if (!digits) return ''
+  return parseInt(digits, 10).toLocaleString('ja-JP')
+}
+
 function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cost[]; partnerMap: Record<string, string>; partners: Partner[]; projectId: string }) {
   const router = useRouter()
   const [dialog, setDialog] = useState<{ vendor_id: string; month: string } | null>(null)
@@ -583,6 +589,22 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
   const [creating, setCreating] = useState(false)
   const [preview, setPreview] = useState<{ url: string; isPdf: boolean } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+
+  // ダイアログ表示時に最初の金額欄へ自動フォーカス
+  const firstEditRef = useRef<HTMLInputElement>(null)
+  const newAmountRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!dialog) return
+    const timer = setTimeout(() => {
+      if (firstEditRef.current) {
+        firstEditRef.current.focus()
+        firstEditRef.current.select()
+      } else {
+        newAmountRef.current?.focus()
+      }
+    }, 80)
+    return () => clearTimeout(timer)
+  }, [dialog?.vendor_id, dialog?.month])
 
   async function openPreview(filePath: string) {
     setPreviewLoading(true)
@@ -863,13 +885,15 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
           </DialogHeader>
 
           <div className="space-y-3">
-            {dialogRecords.map(cost => (
+            {dialogRecords.map((cost, idx) => (
               <div key={cost.cost_id} className="border rounded p-2 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <input
-                    className="flex-1 text-right border rounded px-2 py-1 text-sm"
-                    value={editAmounts[cost.cost_id] ?? cost.amount.toLocaleString()}
-                    onChange={e => setEditAmounts(a => ({ ...a, [cost.cost_id]: e.target.value }))}
+                    ref={idx === 0 ? firstEditRef : undefined}
+                    className="flex-1 text-right border rounded px-2 py-1 text-sm tabular-nums"
+                    inputMode="numeric"
+                    value={editAmounts[cost.cost_id] ?? cost.amount.toLocaleString('ja-JP')}
+                    onChange={e => setEditAmounts(a => ({ ...a, [cost.cost_id]: fmtAmountInput(e.target.value) }))}
                     onFocus={e => e.target.select()}
                   />
                   <Button size="sm" variant="outline" disabled={saving[cost.cost_id]} onClick={() => saveRecord(cost)}>
@@ -919,10 +943,12 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
               <span className="text-xs text-muted-foreground">新規追加</span>
               <div className="flex items-center gap-2">
                 <input
-                  className="flex-1 text-right border rounded px-2 py-1 text-sm"
+                  ref={newAmountRef}
+                  className="flex-1 text-right border rounded px-2 py-1 text-sm tabular-nums"
+                  inputMode="numeric"
                   placeholder="金額"
                   value={newAmount}
-                  onChange={e => setNewAmount(e.target.value)}
+                  onChange={e => setNewAmount(fmtAmountInput(e.target.value))}
                   onFocus={e => e.target.select()}
                   onKeyDown={e => { if (e.key === 'Enter') createRecord() }}
                 />
