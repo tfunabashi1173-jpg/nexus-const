@@ -1,7 +1,7 @@
 'use client'
 
 import { use, useMemo, useState, useEffect, Suspense } from 'react'
-import { Project, Addon, Partner, Sale, Cost, DashboardSummary } from '@/types'
+import { Project, Addon, Partner, DashboardSummary } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYen, formatYenFull } from '@/lib/utils/date'
 import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,27 +30,19 @@ interface Props {
   projects: Project[]
   addons: Addon[]
   partners: Partner[]
-  sales: Sale[]
-  costs: Cost[]
   summaryPromise: Promise<DashboardSummary>
   fiscalStartMonth: number
 }
 
-export function DashboardClient({ projects, addons, partners, sales, costs, summaryPromise, fiscalStartMonth }: Props) {
+export function DashboardClient({ projects, addons, partners, summaryPromise, fiscalStartMonth }: Props) {
   const today = new Date()
   const currentFY = getFiscalYear(today, fiscalStartMonth)
   const [selectedFY, setSelectedFY] = useState(currentFY)
   const [overrideSummary, setOverrideSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [masked, setMasked] = useState(false)
-  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set())
-
   useEffect(() => {
     setMasked(localStorage.getItem('dashboard_masked') === '1')
-    const raw = localStorage.getItem('dismissed_alerts')
-    if (raw) {
-      try { setDismissedAlerts(new Set(JSON.parse(raw))) } catch {}
-    }
   }, [])
 
   function toggleMasked() {
@@ -76,14 +68,6 @@ export function DashboardClient({ projects, addons, partners, sales, costs, summ
       .catch(() => { setLoading(false); toast.error('データの取得に失敗しました') })
   }, [selectedFY, currentFY, fiscalStartMonth])
 
-  function dismissAlert(key: string) {
-    setDismissedAlerts(prev => {
-      const next = new Set(prev).add(key)
-      localStorage.setItem('dismissed_alerts', JSON.stringify([...next]))
-      return next
-    })
-  }
-
   const addonMap = useMemo(() => {
     const map: Record<string, number> = {}
     addons.forEach(a => { map[a.project_id] = (map[a.project_id] ?? 0) + a.amount })
@@ -92,40 +76,6 @@ export function DashboardClient({ projects, addons, partners, sales, costs, summ
 
   const activeProjects = useMemo(
     () => projects.filter(p => ['着工中', '受注'].includes(p.status)),
-    [projects]
-  )
-
-  // 入金遅延：未入金かつ請求日から30日以上経過
-  const overduePayments = useMemo(() => {
-    const todayStr = formatDateLocal(new Date())
-    return sales
-      .filter(s => !s.deposit_status)
-      .map(s => {
-        const billingDate = new Date(s.billing_date)
-        const diffDays = Math.floor((new Date(todayStr).getTime() - billingDate.getTime()) / (1000 * 60 * 60 * 24))
-        return { ...s, diffDays }
-      })
-      .filter(s => s.diffDays >= 30)
-      .sort((a, b) => b.diffDays - a.diffDays)
-  }, [sales])
-
-  // 予算超過：稼働中現場で原価合計 > 契約金額（追加工事含む）
-  const overBudgetProjects = useMemo(() => {
-    const costsByProject: Record<string, number> = {}
-    costs.forEach(c => {
-      if (c.project_id) costsByProject[c.project_id] = (costsByProject[c.project_id] ?? 0) + c.amount
-    })
-    return activeProjects
-      .map(p => {
-        const totalContract = (p.contract_amount ?? 0) + (addonMap[p.project_id] ?? 0)
-        const costsSum = costsByProject[p.project_id] ?? 0
-        return { ...p, totalContract, costsSum, overAmount: costsSum - totalContract }
-      })
-      .filter(p => p.overAmount > 0)
-  }, [activeProjects, costs, addonMap])
-
-  const projectMap = useMemo(
-    () => Object.fromEntries(projects.map(p => [p.project_id, p.site_name])),
     [projects]
   )
 
@@ -167,62 +117,6 @@ export function DashboardClient({ projects, addons, partners, sales, costs, summ
           masked={masked}
         />
       </Suspense>
-
-      {/* 入金遅延アラート */}
-      {overduePayments.filter(s => !dismissedAlerts.has(`overdue_${s.sales_id}`)).length > 0 && (
-        <Card className="border-amber-300 bg-amber-50 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-amber-800 flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4" />入金遅延（請求から30日以上）
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {overduePayments
-              .filter(s => !dismissedAlerts.has(`overdue_${s.sales_id}`))
-              .map(s => (
-                <div key={s.sales_id} className="flex items-center justify-between text-sm bg-white rounded-md px-3 py-2 border border-amber-200">
-                  <div>
-                    <span className="font-medium">{projectMap[s.project_id] ?? s.project_id}</span>
-                    <span className="ml-2 text-slate-500">{s.billing_date}</span>
-                    <span className="ml-2 text-amber-700 font-semibold">{s.diffDays}日経過</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="tabular-nums font-medium">{masked ? '¥ ****' : formatYenFull(s.amount)}</span>
-                    <button onClick={() => dismissAlert(`overdue_${s.sales_id}`)} className="text-slate-400 hover:text-slate-600" title="確認済みにする">
-                      <Eye className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 予算超過アラート */}
-      {overBudgetProjects.filter(p => !dismissedAlerts.has(`overbudget_${p.project_id}`)).length > 0 && (
-        <Card className="border-red-300 bg-red-50 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-red-800 flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4" />予算超過
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {overBudgetProjects
-              .filter(p => !dismissedAlerts.has(`overbudget_${p.project_id}`))
-              .map(p => (
-                <div key={p.project_id} className="flex items-center justify-between text-sm bg-white rounded-md px-3 py-2 border border-red-200">
-                  <div>
-                    <Link href={`/projects/${p.project_id}`} className="font-medium hover:underline">{p.site_name}</Link>
-                    <span className="ml-2 text-red-700 font-semibold">+{masked ? '****' : formatYenFull(p.overAmount)} 超過</span>
-                  </div>
-                  <button onClick={() => dismissAlert(`overbudget_${p.project_id}`)} className="text-slate-400 hover:text-slate-600" title="確認済みにする">
-                    <Eye className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-          </CardContent>
-        </Card>
-      )}
 
       {/* 稼働現場 — 即時表示 */}
       <Card className="bg-white shadow-sm border-0">

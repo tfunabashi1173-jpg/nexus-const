@@ -238,6 +238,7 @@ export function SalesClient({ sales, projects }: Props) {
                       <thead>
                         <tr className="bg-slate-800 text-white sticky top-0 z-10">
                           <th className="text-left py-2.5 px-3 font-medium">請求日</th>
+                          <th className="text-left py-2.5 px-3 font-medium">経過</th>
                           <th className="text-left py-2.5 px-3 font-medium">現場名</th>
                           <th className="text-left py-2.5 px-3 font-medium">名称</th>
                           <th className="text-right py-2.5 px-3 font-medium">金額</th>
@@ -255,7 +256,17 @@ export function SalesClient({ sales, projects }: Props) {
                               setDepositAmount(String(s.amount).replace(/,/g, ''))
                             }}
                           >
-                            <td className="py-2 pr-3">{s.billing_date?.slice(0, 7)}</td>
+                            <td className="py-2 pr-3 whitespace-nowrap">{s.billing_date?.slice(0, 7)}</td>
+                            <td className="py-2 pr-3 whitespace-nowrap">
+                              {(() => {
+                                const days = Math.floor((Date.now() - new Date(s.billing_date).getTime()) / 86400000)
+                                return (
+                                  <span className={`text-xs font-medium tabular-nums ${days >= 60 ? 'text-red-600' : days >= 30 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                    {days}日
+                                  </span>
+                                )
+                              })()}
+                            </td>
                             <td className="py-2 pr-3">{projectMap[s.project_id] ?? '(不明)'}</td>
                             <td className="py-2 pr-3">{s.remarks}</td>
                             <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
