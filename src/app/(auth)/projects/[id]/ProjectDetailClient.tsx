@@ -250,7 +250,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
           <KpiCard label="契約金額（追加含む）" value={formatYenFull(totalContract)} />
           <KpiCard label="請求済売上" value={formatYenFull(salesSum)} />
           <KpiCard label="原価合計" value={formatYenFull(costsSum)} />
-          <KpiCard label="予想粗利" value={formatYenFull(profit)} highlight={profit >= 0} />
+          <KpiCard label="予想粗利" value={formatYenFull(profit)} highlight={profit >= 0} sub={salesSum > 0 ? `${(profit / salesSum * 100).toFixed(1)}%` : undefined} />
         </div>
 
         {/* 予算超過アラート */}
@@ -1166,11 +1166,14 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
   )
 }
 
-function KpiCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function KpiCard({ label, value, highlight, sub }: { label: string; value: string; highlight?: boolean; sub?: string }) {
   return (
     <div className="bg-slate-50 rounded-lg px-4 py-3 border border-slate-100">
       <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-xl font-bold mt-1 tabular-nums ${highlight === false ? 'text-red-600' : highlight ? 'text-emerald-600' : 'text-slate-800'}`}>{value}</p>
+      <p className={`text-xl font-bold mt-1 tabular-nums ${highlight === false ? 'text-red-600' : highlight ? 'text-emerald-600' : 'text-slate-800'}`}>
+        {value}
+        {sub && <span className="text-sm font-medium ml-1.5 opacity-75">{sub}</span>}
+      </p>
     </div>
   )
 }
