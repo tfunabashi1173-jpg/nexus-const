@@ -321,11 +321,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
         <TabsContent value="costs">
           <Card>
             <CardContent className="pt-4">
-              {costs.length === 0 ? (
-                <p className="text-sm text-muted-foreground">原価データがありません</p>
-              ) : (
-                <CostPivotTable costs={costs} partnerMap={partnerMap} partners={partners} projectId={project.project_id} />
-              )}
+              <CostPivotTable costs={costs} partnerMap={partnerMap} partners={partners} projectId={project.project_id} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -783,6 +779,68 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
       utils.book_append_sheet(wb, ws, '原価ピボット')
       writeFile(wb, `原価_${projectId}_${new Date().toLocaleDateString('ja-JP').replace(/\//g, '')}.xlsx`)
     })
+  }
+
+  if (vendors.length === 0 && months.length === 0) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">原価データがありません。業者と月を追加してください。</p>
+        <div className="flex items-center gap-4">
+          {addingVendor ? (
+            <div className="flex items-center gap-2">
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={selectedVendorId}
+                onChange={e => setSelectedVendorId(e.target.value)}
+                autoFocus
+              >
+                <option value="">業者を選択</option>
+                {(['協力業者', '仕入先', '経費'] as const).map(cat => {
+                  const opts = vendorOptions.filter(p => p.category === cat)
+                  if (opts.length === 0) return null
+                  return (
+                    <optgroup key={cat} label={cat}>
+                      {opts.map(p => (
+                        <option key={p.partner_id} value={p.partner_id}>{normalizeCompanyName(p.name)}</option>
+                      ))}
+                    </optgroup>
+                  )
+                })}
+              </select>
+              <button onClick={addVendorRow} className="text-sm text-blue-600 font-medium hover:underline">追加</button>
+              <button onClick={() => { setAddingVendor(false); setSelectedVendorId('') }} className="text-sm text-muted-foreground hover:text-foreground">キャンセル</button>
+            </div>
+          ) : (
+            <button onClick={() => setAddingVendor(true)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+              <span className="text-base font-bold leading-none">+</span> 業者を追加
+            </button>
+          )}
+          {addingMonth ? (
+            <div className="flex flex-col gap-2 bg-slate-50 border rounded p-2">
+              <div className="flex items-center gap-1.5">
+                <button className="h-6 w-6 rounded border border-input flex items-center justify-center text-xs hover:bg-slate-100" onClick={() => setMonthPickYear(y => y - 1)}>−</button>
+                <span className="w-14 text-center text-sm font-medium tabular-nums">{monthPickYear}年</span>
+                <button className="h-6 w-6 rounded border border-input flex items-center justify-center text-xs hover:bg-slate-100" onClick={() => setMonthPickYear(y => y + 1)}>+</button>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                  <button key={m} onClick={() => setMonthPickMonth(m)} className={`h-7 w-9 rounded text-xs font-medium transition-colors ${monthPickMonth === m ? 'bg-blue-600 text-white' : 'border border-input hover:bg-slate-100'}`}>{m}月</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 pt-0.5">
+                <span className="text-xs text-muted-foreground">{monthPickYear}-{String(monthPickMonth).padStart(2, '0')} を追加</span>
+                <button onClick={addMonthColumn} className="text-xs text-blue-600 font-medium hover:underline">追加</button>
+                <button onClick={() => setAddingMonth(false)} className="text-xs text-muted-foreground hover:text-foreground">キャンセル</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setAddingMonth(true)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+              <span className="text-base font-bold leading-none">+</span> 月を追加
+            </button>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
