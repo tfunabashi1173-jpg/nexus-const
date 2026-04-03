@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { Trash2, Plus, Pencil, Check, X, Download, Search, Eye, EyeOff } from 'lucide-react'
+import { formatDateLocal } from '@/lib/utils/date'
 
 interface Props {
   users: User[]
@@ -75,20 +76,21 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
     if (changed.length === 0) { toast('変更はありません'); cancelBulkEditUsers(); return }
 
     setBulkUserSaving(true)
-    let failed = 0
-    await Promise.all(changed.map(async u => {
+    const payload = changed.map(u => {
       const e = bulkUserEdits[u.user_id]
-      const body: Record<string, string> = {}
-      if (e.username !== u.username) body.username = e.username
-      if (e.password) body.password = e.password
-      if (e.role !== u.role) body.role = e.role
-      const res = await fetch(`/api/master/users/${u.user_id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) failed++
-    }))
+      const item: Record<string, string> = { id: u.user_id }
+      if (e.username !== u.username) item.username = e.username
+      if (e.password) item.password = e.password
+      if (e.role !== u.role) item.role = e.role
+      return item
+    })
+    const res = await fetch('/api/master/users/batch', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const result = res.ok ? await res.json() : null
+    const failed = result?.failed ?? changed.length
     setBulkUserSaving(false)
     if (failed === 0) {
       toast.success(`${changed.length}件を更新しました`)
@@ -286,7 +288,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    const today = new Date().toISOString().slice(0, 10)
+    const today = formatDateLocal(new Date())
     a.download = `nexus_backup_${today}.xlsx`
     a.click()
     URL.revokeObjectURL(url)

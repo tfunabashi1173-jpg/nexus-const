@@ -71,12 +71,12 @@ export async function updateProject(id: string, updates: Partial<Project>) {
 export async function softDeleteProject(id: string) {
   const { error } = await supabase()
     .from('projects')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
     .eq('project_id', id)
   // 追加工事も論理削除
   await supabase()
     .from('addons')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
     .eq('project_id', id)
   if (!error) {
     invalidate('projects')
@@ -88,7 +88,7 @@ export async function softDeleteProject(id: string) {
 
 export async function getNextProjectId(): Promise<string> {
   const end = perfStart('getNextProjectId')
-  const prefix = new Date().toISOString().slice(0, 7).replace('-', '')
+  const prefix = formatDateLocal(new Date()).slice(0, 7).replace('-', '')
   const { data } = await supabase()
     .from('projects')
     .select('project_id')
@@ -140,7 +140,7 @@ export async function updatePartner(id: string, updates: Partial<Partner>) {
 export async function softDeletePartner(id: string) {
   const { error } = await supabase()
     .from('partners')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
     .eq('partner_id', id)
   if (!error) invalidate('partners')
   return { error }
@@ -203,7 +203,7 @@ export async function updateSale(id: string, updates: Partial<Sale>) {
 export async function softDeleteSale(id: string) {
   const { error } = await supabase()
     .from('sales')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
     .eq('sales_id', id)
   if (!error) {
     invalidate('sales')
@@ -268,6 +268,7 @@ export async function createSubManager(sub: Omit<ProjectSubManager, 'username'>)
     .select()
     .single()
   if (!error) {
+    invalidate('projects')
     invalidate('dashboard')
     invalidate('revenue')
   }
@@ -277,9 +278,10 @@ export async function createSubManager(sub: Omit<ProjectSubManager, 'username'>)
 export async function deleteSubManager(id: string) {
   const { error } = await supabase()
     .from('project_sub_managers')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
     .eq('id', id)
   if (!error) {
+    invalidate('projects')
     invalidate('dashboard')
     invalidate('revenue')
   }
@@ -314,7 +316,7 @@ export async function updateCost(id: string, updates: Partial<Cost>) {
 export async function softDeleteCost(id: string) {
   const { error } = await supabase()
     .from('costs')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
     .eq('cost_id', id)
   if (!error) {
     invalidate('costs')
@@ -365,6 +367,7 @@ export async function updateAddon(id: string, updates: Partial<Addon>) {
     .select()
     .single()
   if (!error) {
+    invalidate('projects')
     invalidate('dashboard')
     invalidate('revenue')
   }
@@ -374,9 +377,10 @@ export async function updateAddon(id: string, updates: Partial<Addon>) {
 export async function softDeleteAddon(id: string) {
   const { error } = await supabase()
     .from('addons')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
     .eq('addon_id', id)
   if (!error) {
+    invalidate('projects')
     invalidate('dashboard')
     invalidate('revenue')
   }
@@ -413,7 +417,7 @@ export async function updateUser(id: string, updates: Partial<User>) {
 export async function softDeleteUser(id: string) {
   const { error } = await supabase()
     .from('users')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
     .eq('user_id', id)
   return { error }
 }

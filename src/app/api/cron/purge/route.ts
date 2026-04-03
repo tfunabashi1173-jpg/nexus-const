@@ -5,9 +5,11 @@ import { purgeDeleted } from '@/lib/db'
 // Authorization: Bearer <CRON_SECRET> で保護
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
-  const auth = req.headers.get('authorization')
-
-  if (secret && auth !== `Bearer ${secret}`) {
+  if (!secret) {
+    console.error('[cron/purge] CRON_SECRET is not configured')
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+  }
+  if (req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

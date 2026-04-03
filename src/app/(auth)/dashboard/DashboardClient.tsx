@@ -66,7 +66,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
       .then(r => r.json())
       .then(data => { setOverrideSummary(data); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [selectedFY]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFY, currentFY, fiscalStartMonth])
 
   const addonMap = useMemo(() => {
     const map: Record<string, number> = {}

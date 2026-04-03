@@ -27,12 +27,18 @@ export async function login(formData: FormData) {
     return { error: 'IDが見つかりません' }
   }
 
+  const isHashed = data.password.startsWith('$2')
   let isValid = false
-  try {
+
+  if (isHashed) {
     isValid = await bcrypt.compare(password, data.password)
-  } catch {
-    // フォールバック: 平文比較（古いデータ対応）
+  } else {
+    // 平文パスワードの場合: 照合後にハッシュ化して移行
     isValid = data.password === password
+    if (isValid) {
+      const hashed = await bcrypt.hash(password, 10)
+      await supabase.from('users').update({ password: hashed }).eq('user_id', userId)
+    }
   }
 
   if (!isValid) {

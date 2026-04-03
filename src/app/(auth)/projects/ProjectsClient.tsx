@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Project, Partner } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
 import { Card, CardContent } from '@/components/ui/card'
@@ -30,10 +30,13 @@ export function ProjectsClient({ projects, customers }: Props) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [monthFilter, setMonthFilter] = useState(currentYM)
 
-  const customerMap = Object.fromEntries(customers.map(c => [c.partner_id, c.name]))
+  const customerMap = useMemo(
+    () => Object.fromEntries(customers.map(c => [c.partner_id, c.name])),
+    [customers]
+  )
 
   // 稼働月の選択肢: 全プロジェクトのstart_date〜end_dateの範囲から生成
-  const monthOptions = (() => {
+  const monthOptions = useMemo(() => {
     const dates = projects.flatMap(p => [p.start_date, p.end_date]).filter(Boolean) as string[]
     if (dates.length === 0) return [currentYM]
     const min = dates.map(d => d.slice(0, 7)).sort()[0]
@@ -47,9 +50,9 @@ export function ProjectsClient({ projects, customers }: Props) {
       m++; if (m > 12) { m = 1; y++ }
     }
     return months.reverse()
-  })()
+  }, [projects, currentYM])
 
-  const filtered = projects.filter(p => {
+  const filtered = useMemo(() => projects.filter(p => {
     const matchSearch = !search ||
       p.site_name.includes(search) ||
       p.project_id.includes(search) ||
@@ -59,7 +62,7 @@ export function ProjectsClient({ projects, customers }: Props) {
       ((p.start_date?.slice(0, 7) ?? '') <= monthFilter &&
        (p.end_date?.slice(0, 7) ?? '9999-12') >= monthFilter)
     return matchSearch && matchStatus && matchMonth
-  })
+  }), [projects, search, statusFilter, monthFilter])
 
   return (
     <div className="space-y-4">

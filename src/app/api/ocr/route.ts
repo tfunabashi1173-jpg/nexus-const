@@ -77,7 +77,17 @@ export async function POST(req: NextRequest) {
 
     const text = result.response.text()
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim()
-    const data = JSON.parse(jsonStr)
+
+    let data: unknown
+    try {
+      data = JSON.parse(jsonStr)
+    } catch {
+      console.error('[ocr] JSON parse failed. raw response:', jsonStr.slice(0, 500))
+      return NextResponse.json(
+        { error: `AIの応答をJSON解析できませんでした。再度お試しください。` },
+        { status: 502 }
+      )
+    }
 
     return NextResponse.json(data)
   } catch (e: any) {
