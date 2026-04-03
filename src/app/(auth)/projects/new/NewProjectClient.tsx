@@ -133,7 +133,11 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
             <div className="space-y-1.5">
               <Label>得意先 <span className="text-destructive">*</span></Label>
               <Select value={customerId} onValueChange={(v) => { setCustomerId(v ?? ""); setTouched(t => ({...t, customerId: true})) }}>
-                <SelectTrigger className={errors.customerId ? 'border-destructive' : ''}><SelectValue placeholder="得意先を選択" /></SelectTrigger>
+                <SelectTrigger className={errors.customerId ? 'border-destructive' : ''}>
+                  {customerId
+                    ? normalizeCompanyName(customers.find(c => c.partner_id === customerId)?.name ?? '')
+                    : <span className="text-muted-foreground">得意先を選択</span>}
+                </SelectTrigger>
                 <SelectContent>
                   {customers.map(c => <SelectItem key={c.partner_id} value={c.partner_id}>{normalizeCompanyName(c.name)}</SelectItem>)}
                 </SelectContent>
@@ -152,7 +156,11 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
             <div className="space-y-1.5">
               <Label>担当者 <span className="text-destructive">*</span></Label>
               <Select value={managerId} onValueChange={(v) => { setManagerId(v ?? ""); setTouched(t => ({...t, managerId: true})) }}>
-                <SelectTrigger className={errors.managerId ? 'border-destructive' : ''}><SelectValue placeholder="担当者を選択" /></SelectTrigger>
+                <SelectTrigger className={errors.managerId ? 'border-destructive' : ''}>
+                  {managerId
+                    ? (users.find(u => u.user_id === managerId)?.username ?? '')
+                    : <span className="text-muted-foreground">担当者を選択</span>}
+                </SelectTrigger>
                 <SelectContent>
                   {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>)}
                 </SelectContent>
