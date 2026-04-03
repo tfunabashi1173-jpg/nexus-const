@@ -12,7 +12,7 @@ import { AmountInput } from '@/components/ui/amount-input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Plus, Loader2 } from 'lucide-react'
+import { Pencil, Trash2, Plus, Loader2, Search, X } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
@@ -30,7 +30,15 @@ export function SalesClient({ sales, projects }: Props) {
 
   const [deletedSaleIds, setDeletedSaleIds] = useState<Set<string>>(new Set())
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const unpaid = sales.filter(s => !s.deposit_status && !deletedSaleIds.has(s.sales_id))
+  const [unpaidSearch, setUnpaidSearch] = useState('')
+  const [historySearch, setHistorySearch] = useState('')
+  const unpaid = sales.filter(s => {
+    if (s.deposit_status || deletedSaleIds.has(s.sales_id)) return false
+    if (!unpaidSearch) return true
+    const q = unpaidSearch.toLowerCase()
+    return (projectMap[s.project_id] ?? '').toLowerCase().includes(q) ||
+      (s.remarks ?? '').toLowerCase().includes(q)
+  })
   const paid = sales.filter(s => s.deposit_status && !deletedSaleIds.has(s.sales_id))
 
   // 新規売上登録
@@ -136,7 +144,11 @@ export function SalesClient({ sales, projects }: Props) {
   const filteredPaid = paid.filter(s => {
     if (!s.deposit_date) return false
     const [y, m] = s.deposit_date.split('-').map(Number)
-    return y === historyYear && m === historyMonth
+    if (y !== historyYear || m !== historyMonth) return false
+    if (!historySearch) return true
+    const q = historySearch.toLowerCase()
+    return (projectMap[s.project_id] ?? '').toLowerCase().includes(q) ||
+      (s.remarks ?? '').toLowerCase().includes(q)
   })
 
   // 入金消込状態
@@ -232,8 +244,23 @@ export function SalesClient({ sales, projects }: Props) {
         <TabsContent value="unpaid">
           <Card>
             <CardContent className="pt-4 space-y-4">
+              {/* 検索 */}
+              <div className="relative max-w-xs">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={unpaidSearch}
+                  onChange={e => setUnpaidSearch(e.target.value)}
+                  placeholder="現場名・名称で検索"
+                  className="h-8 pl-7 text-sm"
+                />
+                {unpaidSearch && (
+                  <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setUnpaidSearch('')}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
               {unpaid.length === 0 ? (
-                <p className="text-sm text-muted-foreground">未入金の請求はありません</p>
+                <p className="text-sm text-muted-foreground">{unpaidSearch ? '該当する請求がありません' : '未入金の請求はありません'}</p>
               ) : (
                 <>
                   <div className="overflow-auto">
@@ -338,7 +365,21 @@ export function SalesClient({ sales, projects }: Props) {
                     >{m}月</button>
                   ))}
                 </div>
-                <span className="text-xs text-slate-400 ml-auto">{filteredPaid.length}件</span>
+                <div className="relative ml-auto">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    placeholder="現場名・名称で検索"
+                    className="h-7 pl-7 pr-6 text-xs w-44"
+                  />
+                  {historySearch && (
+                    <button type="button" className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setHistorySearch('')}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                <span className="text-xs text-slate-400">{filteredPaid.length}件</span>
               </div>
 
               <div className="overflow-x-auto">

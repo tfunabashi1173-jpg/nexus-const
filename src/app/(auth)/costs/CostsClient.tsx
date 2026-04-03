@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Bot, Pencil, Trash2, Paperclip, Plus, X, Loader2 } from 'lucide-react'
+import { Bot, Pencil, Trash2, Paperclip, Plus, X, Loader2, Search } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { InvoiceDetail } from '@/types'
 
@@ -110,14 +110,23 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
     ? `${today.getFullYear() - 1}-12`
     : `${today.getFullYear()}-${String(today.getMonth()).padStart(2, '0')}`
   const [filterMonth, setFilterMonth] = useState(prevMonthStr)
+  const [listSearch, setListSearch] = useState('')
   const [deletedCostIds, setDeletedCostIds] = useState<Set<string>>(new Set())
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [costPage, setCostPage] = useState(0)
   const COST_PAGE_SIZE = 50
+  const projectNameMap = useMemo(() => Object.fromEntries(projects.map(p => [p.project_id, p.site_name])), [projects])
   const filteredCosts = useMemo(() => {
+    const q = listSearch.trim().toLowerCase()
     const base = filterMonth ? costs.filter(c => c.billing_month?.startsWith(filterMonth)) : costs
-    return base.filter(c => !deletedCostIds.has(c.cost_id))
-  }, [costs, filterMonth, deletedCostIds])
+    return base.filter(c => {
+      if (deletedCostIds.has(c.cost_id)) return false
+      if (!q) return true
+      const vendor = normalizeCompanyName(vendorMap[c.vendor_id] ?? c.vendor_id).toLowerCase()
+      const project = (projectNameMap[c.project_id ?? ''] ?? '').toLowerCase()
+      return vendor.includes(q) || project.includes(q)
+    })
+  }, [costs, filterMonth, listSearch, deletedCostIds, vendorMap, projectNameMap])
   const totalPages = Math.ceil(filteredCosts.length / COST_PAGE_SIZE)
   const paginatedCosts = filteredCosts.slice(costPage * COST_PAGE_SIZE, (costPage + 1) * COST_PAGE_SIZE)
 
@@ -772,13 +781,29 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
         <TabsContent value="list">
           <Card>
             <CardContent className="pt-4">
-              {/* 月フィルター */}
+              {/* フィルター・検索 */}
               <div className="flex items-center gap-2 mb-3 flex-wrap">
-                <Label className="text-xs whitespace-nowrap">月フィルター:</Label>
+                <Label className="text-xs whitespace-nowrap">年月:</Label>
                 <Input type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setCostPage(0) }} className="h-8 w-36 text-sm" />
                 {filterMonth && (
-                  <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => { setFilterMonth(''); setCostPage(0) }}>クリア</Button>
+                  <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => { setFilterMonth(''); setCostPage(0) }}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 )}
+                <div className="relative flex-1 min-w-[160px]">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={listSearch}
+                    onChange={e => { setListSearch(e.target.value); setCostPage(0) }}
+                    placeholder="業者・現場名で検索"
+                    className="h-8 pl-7 text-sm"
+                  />
+                  {listSearch && (
+                    <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setListSearch(''); setCostPage(0) }}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
                 <span className="text-xs text-muted-foreground">{filteredCosts.length}件</span>
                 {totalPages > 1 && (
                   <div className="flex items-center gap-1 ml-auto">
