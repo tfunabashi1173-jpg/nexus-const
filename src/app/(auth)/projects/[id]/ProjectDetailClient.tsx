@@ -250,7 +250,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
           <KpiCard label="契約金額（追加含む）" value={formatYenFull(totalContract)} />
           <KpiCard label="請求済売上" value={formatYenFull(salesSum)} />
           <KpiCard label="原価合計" value={formatYenFull(costsSum)} />
-          <KpiCard label="予想粗利" value={formatYenFull(profit)} highlight={profit >= 0} sub={salesSum > 0 ? `${(profit / salesSum * 100).toFixed(1)}%` : undefined} />
+          <KpiCard label="予想粗利" value={formatYenFull(profit)} highlight={profit >= 0} sub={salesSum !== 0 ? `(${(profit / salesSum * 100).toFixed(1)}%)` : undefined} />
         </div>
 
         {/* 予算超過アラート */}
