@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useMemo, useState, useEffect, Suspense } from 'react'
+import Link from 'next/link'
 import { Project, Addon, Partner, DashboardSummary } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYen, formatYenFull } from '@/lib/utils/date'
 import { normalizeCompanyName } from '@/lib/utils/text'
@@ -143,7 +144,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
                     const addon = addonMap[p.project_id] ?? 0
                     return (
                       <tr key={p.project_id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
-                        <td className="py-2.5 px-3 font-medium">{p.site_name}</td>
+                        <td className="py-2.5 px-3 font-medium"><Link href={`/projects/${p.project_id}`} className="hover:text-blue-600 hover:underline">{p.site_name}</Link></td>
                         <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap text-xs">
                           {p.start_date?.slice(0, 7)} 〜 {p.end_date?.slice(0, 7)}
                         </td>
