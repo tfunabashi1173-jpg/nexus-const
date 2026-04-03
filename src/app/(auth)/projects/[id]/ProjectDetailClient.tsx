@@ -415,7 +415,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">金額（税抜）</Label>
-                    <AmountInput value={saleAmount} onChange={setSaleAmount} />
+                    <AmountInput value={saleAmount} onChange={setSaleAmount} onKeyDown={e => { if (e.key === 'Enter') addSale() }} />
                   </div>
                 </div>
                 <Button onClick={addSale} disabled={isPending} className="mt-3" size="sm">登録</Button>

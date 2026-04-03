@@ -10,13 +10,14 @@ interface AmountInputProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
 }
 
 /**
  * カンマ区切り金額入力フィールド
  * value/onChange はカンマなしの数値文字列でやりとりする
  */
-export function AmountInput({ value, onChange, placeholder = '0', className, disabled }: AmountInputProps) {
+export function AmountInput({ value, onChange, placeholder = '0', className, disabled, onKeyDown }: AmountInputProps) {
   const toDisplay = (raw: string) => {
     const num = parseInt(raw.replace(/,/g, ''), 10)
     return isNaN(num) ? '' : num.toLocaleString()
@@ -41,6 +42,7 @@ export function AmountInput({ value, onChange, placeholder = '0', className, dis
       inputMode="numeric"
       value={display}
       onChange={handleChange}
+      onKeyDown={onKeyDown}
       placeholder={placeholder}
       className={cn(className)}
       disabled={disabled}
