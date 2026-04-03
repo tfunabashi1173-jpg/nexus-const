@@ -193,9 +193,9 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
   const [newPartnerName, setNewPartnerName] = useState('')
   const [newPartnerCategory, setNewPartnerCategory] = useState<string>('得意先')
   const [newDefaultTaxType, setNewDefaultTaxType] = useState<string>('税抜')
-  const [newClosingDay, setNewClosingDay] = useState('')
-  const [newPaymentCycle, setNewPaymentCycle] = useState('')
-  const [newPaymentDay, setNewPaymentDay] = useState('')
+  const [newClosingDay, setNewClosingDay] = useState('99')
+  const [newPaymentCycle, setNewPaymentCycle] = useState('1')
+  const [newPaymentDay, setNewPaymentDay] = useState('99')
   const [newSafetyMember, setNewSafetyMember] = useState(false)
 
   // 証憑管理
