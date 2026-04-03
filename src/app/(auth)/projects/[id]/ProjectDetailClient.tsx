@@ -642,7 +642,14 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
   const [selectedVendorId, setSelectedVendorId] = useState('')
   const vendors = [...new Set([...dbVendors, ...extraVendors])]
 
-  const vendorOptions = partners.filter(p => p.category !== '得意先' && !vendors.includes(p.partner_id))
+  const VENDOR_CATEGORY_ORDER: Record<string, number> = { '協力業者': 0, '仕入先': 1, '経費': 2 }
+  const vendorOptions = partners
+    .filter(p => p.category !== '得意先' && !vendors.includes(p.partner_id))
+    .sort((a, b) => {
+      const catDiff = (VENDOR_CATEGORY_ORDER[a.category] ?? 99) - (VENDOR_CATEGORY_ORDER[b.category] ?? 99)
+      if (catDiff !== 0) return catDiff
+      return a.name.localeCompare(b.name, 'ja')
+    })
 
   // ピボット: [vendor_id][month] = Cost[]
   const pivot: Record<string, Record<string, Cost[]>> = {}
@@ -850,9 +857,17 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                 autoFocus
               >
                 <option value="">業者を選択</option>
-                {vendorOptions.map(p => (
-                  <option key={p.partner_id} value={p.partner_id}>{normalizeCompanyName(p.name)}</option>
-                ))}
+                {(['協力業者', '仕入先', '経費'] as const).map(cat => {
+                  const opts = vendorOptions.filter(p => p.category === cat)
+                  if (opts.length === 0) return null
+                  return (
+                    <optgroup key={cat} label={cat}>
+                      {opts.map(p => (
+                        <option key={p.partner_id} value={p.partner_id}>{normalizeCompanyName(p.name)}</option>
+                      ))}
+                    </optgroup>
+                  )
+                })}
               </select>
               <button onClick={addVendorRow} className="text-sm text-blue-600 font-medium hover:underline">追加</button>
               <button onClick={() => { setAddingVendor(false); setSelectedVendorId('') }} className="text-sm text-muted-foreground hover:text-foreground">キャンセル</button>
