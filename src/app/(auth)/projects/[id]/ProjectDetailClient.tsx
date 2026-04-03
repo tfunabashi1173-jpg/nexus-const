@@ -796,8 +796,8 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
         <table className="border-collapse" style={{ fontSize: '10px' }}>
           <thead>
             <tr className="border-b">
-              <th className="text-left py-2 pr-4 font-medium text-muted-foreground whitespace-nowrap sticky left-0 bg-background">業者</th>
-              <th className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">合計</th>
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground whitespace-nowrap sticky left-0 bg-background w-[128px] min-w-[128px]">業者</th>
+              <th className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap sticky left-[128px] bg-background border-r">合計</th>
               {months.map(m => (
                 <th
                   key={m}
@@ -808,8 +808,8 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
           </thead>
           <tbody>
             <tr className="border-b font-bold bg-muted/30">
-              <td className="py-2 pr-4 sticky left-0 bg-muted/30">合計</td>
-              <td className="py-2 px-3 text-right">{fmtAmt(grandTotal)}</td>
+              <td className="py-2 pr-2 sticky left-0 bg-muted/30 w-[128px] min-w-[128px]">合計</td>
+              <td className="py-2 px-3 text-right sticky left-[128px] bg-muted/30 border-r">{fmtAmt(grandTotal)}</td>
               {months.map(m => (
                 <td key={m} className={`py-2 px-3 text-right whitespace-nowrap transition-colors ${hoveredMonth === m ? 'bg-blue-50' : ''}`}>{fmtAmt(monthTotal(m))}</td>
               ))}
@@ -826,10 +826,10 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                   onMouseLeave={() => setHoveredRow(null)}
                 >
                   <td
-                    className={`py-2 pr-4 whitespace-nowrap sticky left-0 transition-colors font-medium ${isRowHovered ? 'bg-amber-50 text-amber-800' : 'bg-background text-foreground'}`}
+                    className={`py-2 pr-2 whitespace-nowrap sticky left-0 transition-colors font-medium w-[128px] min-w-[128px] overflow-hidden text-ellipsis ${isRowHovered ? 'bg-amber-50 text-amber-800' : 'bg-background text-foreground'}`}
                     title={name}
                   >{shortName}</td>
-                  <td className={`py-2 px-3 text-right font-medium whitespace-nowrap transition-colors ${isRowHovered ? 'bg-amber-50' : ''}`}>{fmtAmt(vendorTotals[vid])}</td>
+                  <td className={`py-2 px-3 text-right font-medium whitespace-nowrap sticky left-[128px] transition-colors border-r ${isRowHovered ? 'bg-amber-50' : 'bg-background'}`}>{fmtAmt(vendorTotals[vid])}</td>
                   {months.map(m => {
                     const records = pivot[vid]?.[m] ?? []
                     const total = records.reduce((s, c) => s + c.amount, 0)
