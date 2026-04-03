@@ -74,32 +74,36 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
 
   const today = new Date()
   const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-  // 手動入力
+  const defaultMonth = today.getMonth() === 0
+    ? `${today.getFullYear() - 1}-12`
+    : `${today.getFullYear()}-${String(today.getMonth()).padStart(2, '0')}`
+
+  // 手動入力（複数行対応）
+  interface ManualRow { rowId: number; project_id: string; month: string; taxType: TaxType; amount: string }
   const [manualVendorId, setManualVendorId] = useState('')
-  const [manualTaxType, setManualTaxType] = useState<TaxType>('税抜')
-  const [manualProjectId, setManualProjectId] = useState('')
-  const [manualMonth, setManualMonth] = useState(
-    today.getMonth() === 0
-      ? `${today.getFullYear() - 1}-12`
-      : `${today.getFullYear()}-${String(today.getMonth()).padStart(2, '0')}`
-  )
-  const [manualAmount, setManualAmount] = useState('')
+  const [manualDefaultTaxType, setManualDefaultTaxType] = useState<TaxType>('税抜')
   const [manualFile, setManualFile] = useState<File | null>(null)
   const [manualShowAll, setManualShowAll] = useState(false)
+  const [manualRowCounter, setManualRowCounter] = useState(1)
+  const [manualRows, setManualRows] = useState<ManualRow[]>([
+    { rowId: 0, project_id: '', month: defaultMonth, taxType: '税抜', amount: '' }
+  ])
+
+  function addManualRow() {
+    setManualRows(prev => [...prev, { rowId: manualRowCounter, project_id: '', month: prev[prev.length - 1]?.month ?? defaultMonth, taxType: manualDefaultTaxType, amount: '' }])
+    setManualRowCounter(c => c + 1)
+  }
+  function removeManualRow(rowId: number) {
+    setManualRows(prev => prev.length > 1 ? prev.filter(r => r.rowId !== rowId) : prev)
+  }
+  function updateManualRow(rowId: number, patch: Partial<ManualRow>) {
+    setManualRows(prev => prev.map(r => r.rowId === rowId ? { ...r, ...patch } : r))
+  }
 
   const manualProjects = useMemo(() => {
-    if (!manualMonth) return projects
-    const [yearStr, monStr] = manualMonth.split('-')
-    const year = parseInt(yearStr)
-    const mon  = parseInt(monStr)
     if (manualShowAll) return projects
-    const prevMonthStart  = new Date(year, mon - 2, 1)
-    const billingMonthEnd = new Date(year, mon, 0)
-    return projects.filter(p => {
-      if (!p.start_date || !p.end_date) return false
-      return new Date(p.start_date) <= billingMonthEnd && new Date(p.end_date) >= prevMonthStart
-    })
-  }, [projects, manualMonth, manualShowAll])
+    return projects.filter(p => p.status === '受注' || p.status === '着工中')
+  }, [projects, manualShowAll])
 
   // 一覧フィルター・楽観的削除
   const prevMonthStr = today.getMonth() === 0
@@ -331,7 +335,19 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
   // 一括割当
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
   const [bulkProjectId, setBulkProjectId] = useState('')
+  const [bulkFilterMonth, setBulkFilterMonth] = useState('')
+  const [bulkSearch, setBulkSearch] = useState('')
   const unassignedCosts = useMemo(() => costs.filter(c => !c.project_id && !deletedCostIds.has(c.cost_id)), [costs, deletedCostIds])
+  const filteredUnassigned = useMemo(() => {
+    return unassignedCosts.filter(c => {
+      if (bulkFilterMonth && !c.billing_month?.startsWith(bulkFilterMonth)) return false
+      if (bulkSearch) {
+        const name = normalizeCompanyName(vendorMap[c.vendor_id] ?? c.vendor_id).toLowerCase()
+        if (!name.includes(bulkSearch.toLowerCase())) return false
+      }
+      return true
+    })
+  }, [unassignedCosts, bulkFilterMonth, bulkSearch, vendorMap])
 
   function toggleBulkSelect(id: string) {
     setBulkSelectedIds(prev => {
@@ -417,43 +433,40 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
   }, [ocrVendorId, ocrMonth, costs])
 
   function submitManual() {
-    if (!manualVendorId || !manualProjectId || !manualMonth || !manualAmount) {
-      toast.error('業者・現場・請求月・金額を入力してください')
-      return
-    }
+    if (!manualVendorId) { toast.error('業者を選択してください'); return }
+    const validRows = manualRows.filter(r => r.month && r.amount && (parseInt(r.amount.replace(/,/g, '')) || 0) > 0)
+    if (validRows.length === 0) { toast.error('請求月・金額を入力してください'); return }
     startTransition(async () => {
-      const body: any = {
-        project_id: manualProjectId || null,
-        vendor_id: manualVendorId,
-        billing_month: manualMonth + '-01',
-        amount: parseInt(manualAmount.replace(/,/g, '')) || 0,
-        tax_type: manualTaxType,
-      }
-      let res: Response
-      if (manualFile) {
-        const form = new FormData()
-        form.append('file', manualFile)
-        form.append('project_id', body.project_id ?? '')
-        form.append('vendor_id', body.vendor_id)
-        form.append('billing_month', body.billing_month)
-        form.append('amount', String(body.amount))
-        form.append('tax_type', manualTaxType)
-        form.append('target_date', body.billing_month)
-        res = await fetch('/api/costs', { method: 'POST', body: form })
-      } else {
-        res = await fetch('/api/costs', {
+      const results = await Promise.all(validRows.map((row, i) => {
+        const amount = parseInt(row.amount.replace(/,/g, '')) || 0
+        const billingMonth = row.month + '-01'
+        if (i === 0 && manualFile) {
+          const form = new FormData()
+          form.append('file', manualFile)
+          form.append('project_id', row.project_id ?? '')
+          form.append('vendor_id', manualVendorId)
+          form.append('billing_month', billingMonth)
+          form.append('amount', String(amount))
+          form.append('tax_type', row.taxType)
+          form.append('target_date', billingMonth)
+          return fetch('/api/costs', { method: 'POST', body: form })
+        }
+        return fetch('/api/costs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ vendor_id: manualVendorId, project_id: row.project_id || null, billing_month: billingMonth, amount, tax_type: row.taxType }),
         })
-      }
-      if (res.ok) {
-        toast.success('原価を登録しました')
-        setManualVendorId(''); setManualTaxType('税抜'); setManualProjectId(''); setManualMonth(''); setManualAmount(''); setManualFile(null)
+      }))
+      const failed = results.filter(r => !r.ok).length
+      if (failed === 0) {
+        toast.success(`${validRows.length}件の原価を登録しました`)
+        setManualVendorId(''); setManualDefaultTaxType('税抜'); setManualFile(null)
+        setManualRows([{ rowId: 0, project_id: '', month: defaultMonth, taxType: '税抜', amount: '' }])
+        setManualRowCounter(1)
         router.refresh()
       } else {
-        const { error } = await res.json()
-        toast.error(`登録エラー: ${error}`)
+        toast.error(`${failed}件の登録に失敗しました`)
+        router.refresh()
       }
     })
   }
@@ -552,13 +565,16 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
         <TabsContent value="manual">
           <Card>
             <CardContent className="pt-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
+              {/* 業者（全行共通） */}
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1.5 flex-1 min-w-[200px]">
                   <Label>業者 <span className="text-destructive">*</span></Label>
                   <Select value={manualVendorId} onValueChange={(v) => {
                     setManualVendorId(v ?? '')
                     const vendor = vendors.find(x => x.partner_id === v)
-                    setManualTaxType((vendor?.default_tax_type ?? '税抜') as TaxType)
+                    const taxType = (vendor?.default_tax_type ?? '税抜') as TaxType
+                    setManualDefaultTaxType(taxType)
+                    setManualRows(prev => prev.map(r => ({ ...r, taxType })))
                   }}>
                     <SelectTrigger>
                       <span className={manualVendorId ? '' : 'text-muted-foreground'}>
@@ -571,46 +587,75 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>現場 <span className="text-destructive">*</span></Label>
-                  <Select value={manualProjectId || '__none__'} onValueChange={(v) => setManualProjectId(v === '__none__' ? '' : (v ?? ''))}>
-                    <SelectTrigger>
-                      <span className={manualProjectId ? '' : 'text-muted-foreground'}>
-                        {manualProjectId ? (projects.find(p => p.project_id === manualProjectId)?.site_name ?? manualProjectId) : '現場を選択'}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {manualProjects.map(p => <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label>証憑ファイル（任意・1行目に紐付け）</Label>
+                  <Input type="file" accept="image/*,.pdf" className="h-9 text-sm" onChange={e => setManualFile(e.target.files?.[0] ?? null)} />
+                </div>
+                <div className="text-xs text-muted-foreground">
                   {!manualShowAll ? (
-                    <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setManualShowAll(true)}>
-                      その他の現場を表示（全件）
-                    </button>
+                    <button type="button" className="underline" onClick={() => setManualShowAll(true)}>全現場表示</button>
                   ) : (
-                    <button type="button" className="text-xs text-muted-foreground underline" onClick={() => { setManualShowAll(false); setManualProjectId('') }}>
-                      稼働現場に絞り込む
-                    </button>
+                    <button type="button" className="underline" onClick={() => setManualShowAll(false)}>稼働現場のみ</button>
                   )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label>請求月 <span className="text-destructive">*</span></Label>
-                  <Input type="month" value={manualMonth} onChange={e => { setManualMonth(e.target.value); setManualShowAll(false); setManualProjectId('') }} />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>税区分 <span className="text-destructive">*</span></Label>
-                  <TaxTypeSelect value={manualTaxType} onChange={setManualTaxType} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>金額（{manualTaxType}）<span className="text-destructive">*</span></Label>
-                  <AmountInput value={manualAmount} onChange={setManualAmount} />
-                </div>
-                <div className="space-y-1.5 md:col-span-2">
-                  <Label>証憑ファイル（任意）</Label>
-                  <Input type="file" accept="image/*,.pdf" onChange={e => setManualFile(e.target.files?.[0] ?? null)} />
-                </div>
               </div>
-              <Button onClick={submitManual} disabled={isPending}>登録</Button>
+
+              {/* 行テーブル */}
+              <div className="overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="text-left py-2 px-2 font-medium">現場</th>
+                      <th className="text-left py-2 px-2 font-medium w-32">請求月</th>
+                      <th className="text-left py-2 px-2 font-medium w-24">税区分</th>
+                      <th className="text-left py-2 px-2 font-medium w-36">金額</th>
+                      <th className="py-2 px-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manualRows.map((row, i) => (
+                      <tr key={row.rowId} className={`border-b ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                        <td className="py-1.5 px-2">
+                          <Select value={row.project_id || '__none__'} onValueChange={v => updateManualRow(row.rowId, { project_id: v === '__none__' ? '' : (v ?? '') })}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <span className={row.project_id ? '' : 'text-muted-foreground text-xs'}>
+                                {row.project_id ? (projects.find(p => p.project_id === row.project_id)?.site_name ?? row.project_id) : '（未選択）'}
+                              </span>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">（現場なし）</SelectItem>
+                              {manualProjects.map(p => <SelectItem key={p.project_id} value={p.project_id}>{p.site_name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <Input type="month" value={row.month} onChange={e => updateManualRow(row.rowId, { month: e.target.value })} className="h-8 text-xs w-32" />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <TaxTypeSelect value={row.taxType} onChange={v => updateManualRow(row.rowId, { taxType: v })} className="h-8 text-xs" />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <AmountInput value={row.amount} onChange={v => updateManualRow(row.rowId, { amount: v })} className="h-8 text-xs" />
+                        </td>
+                        <td className="py-1.5 px-2 text-center">
+                          <button type="button" onClick={() => removeManualRow(row.rowId)} className="text-muted-foreground hover:text-destructive">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={addManualRow} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5" />行を追加
+                </button>
+                <Button onClick={submitManual} disabled={isPending} size="sm">
+                  {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                  {manualRows.length > 1 ? `${manualRows.length}件まとめて登録` : '登録'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1145,11 +1190,18 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
         <TabsContent value="bulk">
           <Card>
             <CardContent className="pt-4 space-y-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex-1 min-w-[200px]">
+              {/* 割当先選択 + 実行ボタン */}
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="flex-1 min-w-[220px]">
                   <Label className="text-xs mb-1 block">割当先工事 <span className="text-destructive">*</span></Label>
                   <Select value={bulkProjectId} onValueChange={v => setBulkProjectId(v ?? '')}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="工事を選択" /></SelectTrigger>
+                    <SelectTrigger className="h-9">
+                      <span className={bulkProjectId ? '' : 'text-muted-foreground text-sm'}>
+                        {bulkProjectId
+                          ? `${bulkProjectId} ${projects.find(p => p.project_id === bulkProjectId)?.site_name ?? ''}`
+                          : '工事を選択'}
+                      </span>
+                    </SelectTrigger>
                     <SelectContent>
                       {projects.map(p => (
                         <SelectItem key={p.project_id} value={p.project_id}>{p.project_id} {p.site_name}</SelectItem>
@@ -1157,15 +1209,28 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="pt-5">
-                  <Button size="sm" onClick={assignBulk} disabled={isPending || bulkSelectedIds.size === 0 || !bulkProjectId}>
-                    {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
-                    選択した{bulkSelectedIds.size > 0 ? `${bulkSelectedIds.size}件を` : ''}割り当て
-                  </Button>
-                </div>
+                <Button size="sm" onClick={assignBulk} disabled={isPending || bulkSelectedIds.size === 0 || !bulkProjectId}>
+                  {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                  選択した{bulkSelectedIds.size > 0 ? `${bulkSelectedIds.size}件を` : ''}割り当て
+                </Button>
                 {bulkSelectedIds.size > 0 && (
-                  <Button size="sm" variant="ghost" className="pt-5 mt-auto" onClick={() => setBulkSelectedIds(new Set())}>選択解除</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setBulkSelectedIds(new Set())}>選択解除</Button>
                 )}
+              </div>
+
+              {/* フィルタ・検索 */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs whitespace-nowrap">年月:</Label>
+                  <Input type="month" value={bulkFilterMonth} onChange={e => { setBulkFilterMonth(e.target.value); setBulkSelectedIds(new Set()) }} className="h-8 w-36 text-sm" />
+                  {bulkFilterMonth && <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setBulkFilterMonth('')}><X className="h-3.5 w-3.5" /></button>}
+                </div>
+                <div className="flex items-center gap-1 flex-1 min-w-[150px]">
+                  <Label className="text-xs whitespace-nowrap">業者検索:</Label>
+                  <Input value={bulkSearch} onChange={e => setBulkSearch(e.target.value)} placeholder="業者名で絞り込み" className="h-8 text-sm flex-1" />
+                  {bulkSearch && <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setBulkSearch('')}><X className="h-3.5 w-3.5" /></button>}
+                </div>
+                <span className="text-xs text-muted-foreground">{filteredUnassigned.length}件 / 未割当{unassignedCosts.length}件</span>
               </div>
 
               {unassignedCosts.length === 0 ? (
@@ -1179,8 +1244,14 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                           <input
                             type="checkbox"
                             className="h-3.5 w-3.5"
-                            checked={unassignedCosts.length > 0 && bulkSelectedIds.size === unassignedCosts.length}
-                            onChange={e => setBulkSelectedIds(e.target.checked ? new Set(unassignedCosts.map(c => c.cost_id)) : new Set())}
+                            checked={filteredUnassigned.length > 0 && filteredUnassigned.every(c => bulkSelectedIds.has(c.cost_id))}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setBulkSelectedIds(prev => new Set([...prev, ...filteredUnassigned.map(c => c.cost_id)]))
+                              } else {
+                                setBulkSelectedIds(prev => { const n = new Set(prev); filteredUnassigned.forEach(c => n.delete(c.cost_id)); return n })
+                              }
+                            }}
                           />
                         </th>
                         <th className="text-left py-2.5 px-3 font-medium">請求月</th>
@@ -1189,7 +1260,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                       </tr>
                     </thead>
                     <tbody>
-                      {unassignedCosts.map((c, i) => (
+                      {filteredUnassigned.map((c, i) => (
                         <tr
                           key={c.cost_id}
                           className={`border-b last:border-0 cursor-pointer transition-colors ${bulkSelectedIds.has(c.cost_id) ? 'bg-blue-50' : i % 2 === 1 ? 'bg-slate-50 hover:bg-blue-50' : 'bg-white hover:bg-blue-50'}`}
@@ -1208,6 +1279,9 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                           <td className="py-2 px-3 text-right tabular-nums">{formatYenFull(c.amount)}</td>
                         </tr>
                       ))}
+                      {filteredUnassigned.length === 0 && (
+                        <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">該当データなし</td></tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
