@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useMemo, useRef, useEffect } from 'react'
-import { Project, Cost, Sale, Addon, Partner, User, ProjectSubManager } from '@/types'
+import { Project, Cost, Sale, Addon, Partner, User, ProjectSubManager, TaxType } from '@/types'
 import { formatYenFull, formatDateLocal } from '@/lib/utils/date'
 import { AmountInput } from '@/components/ui/amount-input'
 import { normalizeCompanyName } from '@/lib/utils/text'
@@ -584,8 +584,10 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
   const router = useRouter()
   const [dialog, setDialog] = useState<{ vendor_id: string; month: string } | null>(null)
   const [editAmounts, setEditAmounts] = useState<Record<string, string>>({})
+  const [editTaxTypes, setEditTaxTypes] = useState<Record<string, TaxType>>({})
   const [saving, setSaving] = useState<Record<string, boolean>>({})
   const [newAmount, setNewAmount] = useState('')
+  const [newTaxType, setNewTaxType] = useState<TaxType>('税抜')
   const [creating, setCreating] = useState(false)
   const [preview, setPreview] = useState<{ url: string; isPdf: boolean } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -670,12 +672,13 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
 
   async function saveRecord(cost: Cost) {
     const newAmt = parseInt((editAmounts[cost.cost_id] ?? '').replace(/,/g, ''))
-    if (isNaN(newAmt) || newAmt === cost.amount) return
+    const newTax = editTaxTypes[cost.cost_id] ?? cost.tax_type
+    if (isNaN(newAmt) || (newAmt === cost.amount && newTax === cost.tax_type)) return
     setSaving(s => ({ ...s, [cost.cost_id]: true }))
     const res = await fetch('/api/costs', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: cost.cost_id, amount: newAmt }),
+      body: JSON.stringify({ id: cost.cost_id, amount: newAmt, tax_type: newTax }),
     })
     setSaving(s => ({ ...s, [cost.cost_id]: false }))
     if (res.ok) { toast.success('更新しました'); router.refresh() }
@@ -706,6 +709,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
       form.append('vendor_id', dialog.vendor_id)
       form.append('billing_month', dialog.month + '-01')
       form.append('amount', String(amt))
+      form.append('tax_type', newTaxType)
       form.append('target_date', dialog.month + '-01')
       form.append('file', newFile)
       res = await fetch('/api/costs', { method: 'POST', body: form })
@@ -713,7 +717,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
       res = await fetch('/api/costs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, vendor_id: dialog.vendor_id, billing_month: dialog.month + '-01', amount: amt }),
+        body: JSON.stringify({ project_id: projectId, vendor_id: dialog.vendor_id, billing_month: dialog.month + '-01', amount: amt, tax_type: newTaxType }),
       })
     }
 
@@ -721,6 +725,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     if (res.ok) {
       toast.success('登録しました')
       setNewAmount('')
+      setNewTaxType('税抜')
       setNewFile(null)
       setExtraMonths(prev => prev.filter(m => m !== dialog.month))
       setExtraVendors(prev => prev.filter(v => v !== dialog.vendor_id))
@@ -831,9 +836,15 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                         onClick={() => {
                           setDialog({ vendor_id: vid, month: m })
                           setNewAmount('')
-                          const init: Record<string, string> = {}
-                          records.forEach(c => { init[c.cost_id] = c.amount.toLocaleString('ja-JP') })
-                          setEditAmounts(init)
+                          const initAmt: Record<string, string> = {}
+                          const initTax: Record<string, TaxType> = {}
+                          records.forEach(c => {
+                            initAmt[c.cost_id] = c.amount.toLocaleString('ja-JP')
+                            initTax[c.cost_id] = c.tax_type ?? '税抜'
+                          })
+                          setEditAmounts(initAmt)
+                          setEditTaxTypes(initTax)
+                          setNewTaxType('税抜')
                         }}
                       >
                         {records.length > 0 ? fmtAmt(total) : <span className="text-muted-foreground/40">—</span>}
@@ -940,6 +951,15 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
             {dialogRecords.map((cost, idx) => (
               <div key={cost.cost_id} className="border rounded p-2 space-y-1.5">
                 <div className="flex items-center gap-2">
+                  <select
+                    className="border rounded px-1.5 py-1 text-xs text-muted-foreground bg-background"
+                    value={editTaxTypes[cost.cost_id] ?? cost.tax_type ?? '税抜'}
+                    onChange={e => setEditTaxTypes(t => ({ ...t, [cost.cost_id]: e.target.value as TaxType }))}
+                  >
+                    <option value="税抜">税抜</option>
+                    <option value="税込">税込</option>
+                    <option value="免税">免税</option>
+                  </select>
                   <input
                     ref={idx === 0 ? firstEditRef : undefined}
                     className="flex-1 text-right border rounded px-2 py-1 text-sm tabular-nums"
@@ -994,6 +1014,15 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
             <div className="pt-2 border-t space-y-2">
               <span className="text-xs text-muted-foreground">新規追加</span>
               <div className="flex items-center gap-2">
+                <select
+                  className="border rounded px-1.5 py-1 text-xs text-muted-foreground bg-background"
+                  value={newTaxType}
+                  onChange={e => setNewTaxType(e.target.value as TaxType)}
+                >
+                  <option value="税抜">税抜</option>
+                  <option value="税込">税込</option>
+                  <option value="免税">免税</option>
+                </select>
                 <input
                   ref={newAmountRef}
                   className="flex-1 text-right border rounded px-2 py-1 text-sm tabular-nums"
