@@ -333,7 +333,8 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
     })
   }
 
-  function addPartner() {
+  function addPartner(category?: string) {
+    const cat = category ?? newPartnerCategory
     if (!newPartnerName) { toast.error('名称を入力してください'); return }
     startTransition(async () => {
       const res = await fetch('/api/master/partners', {
@@ -341,12 +342,12 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newPartnerName,
-          category: newPartnerCategory,
+          category: cat,
           default_tax_type: newDefaultTaxType,
           closing_day: newClosingDay ? parseInt(newClosingDay) : null,
           payment_cycle: newPaymentCycle ? parseInt(newPaymentCycle) : null,
           payment_day: newPaymentDay ? parseInt(newPaymentDay) : null,
-          safety_fee_rate: SAFETY_CATS.includes(newPartnerCategory) && newSafetyMember ? 1 : null,
+          safety_fee_rate: SAFETY_CATS.includes(cat) && newSafetyMember ? 1 : null,
         }),
       })
       if (res.ok) {
@@ -887,7 +888,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                     )}
                   </div>
                   <Button
-                    onClick={() => { setNewPartnerCategory(cat); addPartner() }}
+                    onClick={() => addPartner(cat)}
                     disabled={isPending}
                     className="mt-3"
                     size="sm"
