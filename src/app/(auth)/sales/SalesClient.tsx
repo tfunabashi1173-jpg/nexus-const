@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, Plus } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface Props {
   sales: Sale[]
@@ -28,6 +29,7 @@ export function SalesClient({ sales, projects }: Props) {
   const depositDateMap = Object.fromEntries(projects.map(p => [p.project_id, p.scheduled_deposit_date]))
 
   const [deletedSaleIds, setDeletedSaleIds] = useState<Set<string>>(new Set())
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const unpaid = sales.filter(s => !s.deposit_status && !deletedSaleIds.has(s.sales_id))
   const paid = sales.filter(s => s.deposit_status && !deletedSaleIds.has(s.sales_id))
 
@@ -111,7 +113,6 @@ export function SalesClient({ sales, projects }: Props) {
   }
 
   function deleteSale(id: string) {
-    if (!window.confirm('この売上データを削除しますか？')) return
     startTransition(async () => {
       const res = await fetch('/api/sales', {
         method: 'DELETE',
@@ -229,13 +230,13 @@ export function SalesClient({ sales, projects }: Props) {
           <Card>
             <CardContent className="pt-4 space-y-4">
               {unpaid.length === 0 ? (
-                <p className="text-sm text-green-600">✅ 未入金の請求はありません</p>
+                <p className="text-sm text-muted-foreground">未入金の請求はありません</p>
               ) : (
                 <>
                   <div className="overflow-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="bg-slate-800 text-white">
+                        <tr className="bg-slate-800 text-white sticky top-0 z-10">
                           <th className="text-left py-2.5 px-3 font-medium">請求日</th>
                           <th className="text-left py-2.5 px-3 font-medium">現場名</th>
                           <th className="text-left py-2.5 px-3 font-medium">名称</th>
@@ -260,7 +261,7 @@ export function SalesClient({ sales, projects }: Props) {
                             <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
                             <td className="py-2">{depositDateMap[s.project_id] ?? '-'}</td>
                             <td className="py-2 pr-3 text-right" onClick={e => e.stopPropagation()}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteSale(s.sales_id)} disabled={isPending}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setConfirmDeleteId(s.sales_id)} disabled={isPending}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </td>
@@ -335,7 +336,7 @@ export function SalesClient({ sales, projects }: Props) {
                     <col className="w-16" />
                   </colgroup>
                   <thead>
-                    <tr className="bg-slate-800 text-white">
+                    <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium whitespace-nowrap">請求日</th>
                       <th className="text-left py-2.5 px-3 font-medium">現場名</th>
                       <th className="text-left py-2.5 px-3 font-medium">名称</th>
@@ -381,7 +382,7 @@ export function SalesClient({ sales, projects }: Props) {
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startSaleEdit(s)} disabled={isPending}>
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteSale(s.sales_id)} disabled={isPending}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setConfirmDeleteId(s.sales_id)} disabled={isPending}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
@@ -399,6 +400,14 @@ export function SalesClient({ sales, projects }: Props) {
           </Card>
         </TabsContent>
       </Tabs>
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={open => { if (!open) setConfirmDeleteId(null) }}
+        title="売上データの削除"
+        description="この売上データを削除しますか？削除後はゴミ箱から復元できます。"
+        confirmLabel="削除"
+        onConfirm={() => { if (confirmDeleteId) deleteSale(confirmDeleteId) }}
+      />
     </div>
   )
 }

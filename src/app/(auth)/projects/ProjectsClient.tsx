@@ -109,7 +109,7 @@ export function ProjectsClient({ projects, customers }: Props) {
       <div className="overflow-auto rounded-lg shadow-sm border-0 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-800 text-white">
+            <tr className="bg-slate-800 text-white sticky top-0 z-10">
               <th className="text-left py-3 px-3 font-medium">工事ID</th>
               <th className="text-left py-3 px-3 font-medium">現場名</th>
               <th className="text-left py-3 px-3 font-medium">ステータス</th>

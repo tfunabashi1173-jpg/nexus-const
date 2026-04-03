@@ -507,7 +507,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
               <div className="overflow-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-800 text-white">
+                    <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium">ID</th>
                       <th className="text-left py-2.5 px-3 font-medium">名前</th>
                       <th className="text-left py-2.5 px-3 font-medium">パスワード</th>
@@ -678,7 +678,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                 <div className="overflow-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-slate-800 text-white">
+                      <tr className="bg-slate-800 text-white sticky top-0 z-10">
                         <th className="text-left py-2.5 px-3 font-medium">名称</th>
                         {cat === '得意先' && <>
                           <th className="text-center py-2.5 px-3 font-medium">締日</th>
@@ -984,7 +984,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                       <div className="border rounded overflow-hidden">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="bg-slate-800 text-white">
+                            <tr className="bg-slate-800 text-white sticky top-0 z-10">
                               <th className="text-left py-2 px-3 font-medium">ファイル名</th>
                               <th className="py-2 px-3 w-32"></th>
                             </tr>

@@ -102,7 +102,7 @@ export function AuditClient({ logs }: Props) {
       <div className="rounded-md border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-800 text-white">
+            <tr className="bg-slate-800 text-white sticky top-0 z-10">
               <th className="px-3 py-2 text-left font-medium w-8"></th>
               <th className="px-3 py-2 text-left font-medium whitespace-nowrap">日時(JST)</th>
               <th className="px-3 py-2 text-left font-medium">ユーザー</th>

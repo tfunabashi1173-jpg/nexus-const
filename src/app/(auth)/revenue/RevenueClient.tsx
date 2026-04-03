@@ -11,6 +11,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid
 } from 'recharts'
 import { Download } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface Props {
   initialSummary: RevenueSummary
@@ -49,8 +50,8 @@ export function RevenueClient({
     fetch(`/api/revenue-summary?fy_start=${s}&fy_end=${e}`)
       .then(r => r.json())
       .then(data => { setSummary(data); setSummaryLoading(false) })
-      .catch(() => setSummaryLoading(false))
-  }, [selectedFY]) // eslint-disable-line react-hooks/exhaustive-deps
+      .catch(() => { setSummaryLoading(false); toast.error('データの取得に失敗しました') })
+  }, [selectedFY, currentFY, fiscalStartMonth, initialSummary])
 
   // 月変更 → 月次データ再取得
   useEffect(() => {
@@ -62,8 +63,8 @@ export function RevenueClient({
     fetch(`/api/revenue-monthly?month=${selectedMonth}`)
       .then(r => r.json())
       .then(data => { setMonthlyData(data); setMonthlyLoading(false) })
-      .catch(() => setMonthlyLoading(false))
-  }, [selectedMonth]) // eslint-disable-line react-hooks/exhaustive-deps
+      .catch(() => { setMonthlyLoading(false); toast.error('データの取得に失敗しました') })
+  }, [selectedMonth, initialMonth, initialMonthlyData])
 
   const annualData = summary.annual
   const totalSales  = annualData.reduce((s, r) => s + r.sales, 0)
@@ -215,7 +216,7 @@ export function RevenueClient({
               <div className="overflow-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-800 text-white">
+                    <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium">順位</th>
                       <th className="text-left py-2.5 px-3 font-medium">業者名</th>
                       <th className="text-right py-2.5 px-3 font-medium">発注額</th>
@@ -252,7 +253,7 @@ function RevenueTable({ data }: { data: { project_id: string; site_name: string;
     <div className="overflow-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-slate-800 text-white">
+          <tr className="bg-slate-800 text-white sticky top-0 z-10">
             <th className="text-left py-2.5 px-3 font-medium">現場名</th>
             <th className="text-right py-2.5 px-3 font-medium">売上</th>
             <th className="text-right py-2.5 px-3 font-medium">原価</th>

@@ -325,7 +325,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
               {addons.length > 0 && (
                 <table className="w-full text-sm mb-4">
                   <thead>
-                    <tr className="bg-slate-800 text-white">
+                    <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium">日付</th>
                       <th className="text-left py-2.5 px-3 font-medium">内容</th>
                       <th className="text-right py-2.5 px-3 font-medium">金額</th>
@@ -371,7 +371,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
               {sales.length > 0 && (
                 <table className="w-full text-sm mb-4">
                   <thead>
-                    <tr className="bg-slate-800 text-white">
+                    <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium">請求日</th>
                       <th className="text-left py-2.5 px-3 font-medium">名称</th>
                       <th className="text-right py-2.5 px-3 font-medium">金額</th>

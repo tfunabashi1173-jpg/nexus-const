@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { Bot, Pencil, Trash2, Paperclip, Plus, X } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { InvoiceDetail } from '@/types'
 
 interface Props {
@@ -106,6 +107,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
     : `${today.getFullYear()}-${String(today.getMonth()).padStart(2, '0')}`
   const [filterMonth, setFilterMonth] = useState(prevMonthStr)
   const [deletedCostIds, setDeletedCostIds] = useState<Set<string>>(new Set())
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const filteredCosts = useMemo(() => {
     const base = filterMonth ? costs.filter(c => c.billing_month?.startsWith(filterMonth)) : costs
     return base.filter(c => !deletedCostIds.has(c.cost_id))
@@ -306,7 +308,6 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
   }
 
   function deleteCost(id: string) {
-    if (!window.confirm('この原価データを削除しますか？')) return
     startTransition(async () => {
       const res = await fetch('/api/costs', {
         method: 'DELETE',
@@ -603,7 +604,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                     <div className="overflow-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-slate-800 text-white">
+                          <tr className="bg-slate-800 text-white sticky top-0 z-10">
                             <th className="text-left py-2 px-3 font-medium">請求書の現場名</th>
                             <th className="text-right py-2 px-3 font-medium">小計</th>
                             <th className="text-left py-2 px-3 font-medium">振り当て工事</th>
@@ -701,7 +702,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                     <col className="w-[16%]" />
                   </colgroup>
                   <thead className="sticky top-0">
-                    <tr className="bg-slate-800 text-white">
+                    <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium">請求月</th>
                       <th className="text-left py-2.5 px-3 font-medium">業者</th>
                       <th className="text-left py-2.5 px-3 font-medium">現場</th>
@@ -994,7 +995,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(c)} disabled={isPending}>
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteCost(c.cost_id)} disabled={isPending}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setConfirmDeleteId(c.cost_id)} disabled={isPending}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
@@ -1032,7 +1033,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
               <div className="overflow-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-800 text-white">
+                    <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium">業者名</th>
                       <th className="text-center py-2.5 px-3 font-medium">安協加入</th>
                       <th className="text-right py-2.5 px-3 font-medium">請求金額（税抜）</th>
@@ -1081,6 +1082,14 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
           </Card>
         </TabsContent>
       </Tabs>
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={open => { if (!open) setConfirmDeleteId(null) }}
+        title="原価データの削除"
+        description="この原価データを削除しますか？削除後はゴミ箱から復元できます。"
+        confirmLabel="削除"
+        onConfirm={() => { if (confirmDeleteId) deleteCost(confirmDeleteId) }}
+      />
     </div>
   )
 }

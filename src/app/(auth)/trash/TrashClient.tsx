@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { RotateCcw, Trash2 } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface Props {
   deletedProjects: Project[]
@@ -40,6 +41,7 @@ export function TrashClient({
   const [partners, setPartners] = useState(initPartners)
   const [addons, setAddons] = useState(initAddons)
   const [isPending, startTransition] = useTransition()
+  const [confirmTarget, setConfirmTarget] = useState<{ type: string; id: string; remove: () => void } | null>(null)
 
   function restore(type: string, id: string, remove: () => void) {
     startTransition(async () => {
@@ -58,7 +60,6 @@ export function TrashClient({
   }
 
   function hardDelete(type: string, id: string, remove: () => void) {
-    if (!window.confirm('完全削除します。この操作は取り消せません。よろしいですか？')) return
     startTransition(async () => {
       const res = await fetch('/api/trash', {
         method: 'DELETE',
@@ -102,8 +103,8 @@ export function TrashClient({
               cells: [p.site_name, p.status, p.manager_name ?? p.manager_id, formatDeletedAt(p.deleted_at)],
               onRestore: () => restore('project', p.project_id, () =>
                 setProjects(prev => prev.filter(x => x.project_id !== p.project_id))),
-              onHardDelete: () => hardDelete('project', p.project_id, () =>
-                setProjects(prev => prev.filter(x => x.project_id !== p.project_id))),
+              onHardDelete: () => setConfirmTarget({ type: 'project', id: p.project_id, remove: () =>
+                setProjects(prev => prev.filter(x => x.project_id !== p.project_id)) }),
             }))}
             isPending={isPending}
           />
@@ -119,8 +120,8 @@ export function TrashClient({
               cells: [projectsMap[s.project_id] ?? s.project_id, s.billing_date, formatYenFull(s.amount), formatDeletedAt(s.deleted_at)],
               onRestore: () => restore('sale', s.sales_id, () =>
                 setSales(prev => prev.filter(x => x.sales_id !== s.sales_id))),
-              onHardDelete: () => hardDelete('sale', s.sales_id, () =>
-                setSales(prev => prev.filter(x => x.sales_id !== s.sales_id))),
+              onHardDelete: () => setConfirmTarget({ type: 'sale', id: s.sales_id, remove: () =>
+                setSales(prev => prev.filter(x => x.sales_id !== s.sales_id)) }),
             }))}
             isPending={isPending}
           />
@@ -142,8 +143,8 @@ export function TrashClient({
               ],
               onRestore: () => restore('cost', c.cost_id, () =>
                 setCosts(prev => prev.filter(x => x.cost_id !== c.cost_id))),
-              onHardDelete: () => hardDelete('cost', c.cost_id, () =>
-                setCosts(prev => prev.filter(x => x.cost_id !== c.cost_id))),
+              onHardDelete: () => setConfirmTarget({ type: 'cost', id: c.cost_id, remove: () =>
+                setCosts(prev => prev.filter(x => x.cost_id !== c.cost_id)) }),
             }))}
             isPending={isPending}
           />
@@ -159,8 +160,8 @@ export function TrashClient({
               cells: [p.name, p.category, formatDeletedAt(p.deleted_at)],
               onRestore: () => restore('partner', p.partner_id, () =>
                 setPartners(prev => prev.filter(x => x.partner_id !== p.partner_id))),
-              onHardDelete: () => hardDelete('partner', p.partner_id, () =>
-                setPartners(prev => prev.filter(x => x.partner_id !== p.partner_id))),
+              onHardDelete: () => setConfirmTarget({ type: 'partner', id: p.partner_id, remove: () =>
+                setPartners(prev => prev.filter(x => x.partner_id !== p.partner_id)) }),
             }))}
             isPending={isPending}
           />
@@ -176,13 +177,21 @@ export function TrashClient({
               cells: [projectsMap[a.project_id] ?? a.project_id, a.description ?? '—', formatYenFull(a.amount), formatDeletedAt(a.deleted_at)],
               onRestore: () => restore('addon', a.addon_id, () =>
                 setAddons(prev => prev.filter(x => x.addon_id !== a.addon_id))),
-              onHardDelete: () => hardDelete('addon', a.addon_id, () =>
-                setAddons(prev => prev.filter(x => x.addon_id !== a.addon_id))),
+              onHardDelete: () => setConfirmTarget({ type: 'addon', id: a.addon_id, remove: () =>
+                setAddons(prev => prev.filter(x => x.addon_id !== a.addon_id)) }),
             }))}
             isPending={isPending}
           />
         </TabsContent>
       </Tabs>
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        onOpenChange={open => { if (!open) setConfirmTarget(null) }}
+        title="完全削除の確認"
+        description="完全削除します。この操作は取り消せません。よろしいですか？"
+        confirmLabel="完全削除"
+        onConfirm={() => { if (confirmTarget) hardDelete(confirmTarget.type, confirmTarget.id, confirmTarget.remove) }}
+      />
     </div>
   )
 }
@@ -215,7 +224,7 @@ function TrashTable({
     <div className="mt-3 overflow-auto rounded-lg border bg-white">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-slate-800 text-white">
+          <tr className="bg-slate-800 text-white sticky top-0 z-10">
             {headers.map((h, i) => (
               <th key={i} className={`py-2.5 px-3 font-medium text-sm ${i === headers.length - 1 ? 'w-36' : 'text-left'}`}>
                 {h}

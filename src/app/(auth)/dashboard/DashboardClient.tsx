@@ -23,6 +23,7 @@ import {
   LabelList,
 } from 'recharts'
 import { AlertTriangle, EyeOff, Eye } from 'lucide-react'
+import { toast } from 'sonner'
 import Link from 'next/link'
 
 interface Props {
@@ -65,7 +66,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
     fetch(`/api/dashboard-summary?fy_start=${s}&fy_end=${e}`)
       .then(r => r.json())
       .then(data => { setOverrideSummary(data); setLoading(false) })
-      .catch(() => setLoading(false))
+      .catch(() => { setLoading(false); toast.error('データの取得に失敗しました') })
   }, [selectedFY, currentFY, fiscalStartMonth])
 
   const addonMap = useMemo(() => {
@@ -130,7 +131,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
             <div className="overflow-auto max-h-64">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-800 text-white">
+                  <tr className="bg-slate-800 text-white sticky top-0 z-10">
                     <th className="text-left py-2.5 px-3 font-medium text-sm">現場名</th>
                     <th className="text-left py-2.5 px-3 font-medium text-sm">工期</th>
                     <th className="text-left py-2.5 px-3 font-medium text-sm">担当</th>
@@ -232,7 +233,7 @@ function KpiContent({
         </div>
         <div className={`rounded-xl p-5 text-white shadow-sm ${totalProfit >= 0 ? 'bg-emerald-600' : 'bg-red-600'}`}>
           <p className={`text-sm font-medium ${totalProfit >= 0 ? 'text-emerald-100' : 'text-red-100'}`}>粗利</p>
-          <p className="text-3xl font-bold mt-2 tabular-nums">{fmt(totalProfit)}</p>
+          <p className="text-3xl font-bold mt-2 tabular-nums">{totalProfit >= 0 ? '+' : '▲'}{fmt(Math.abs(totalProfit))}</p>
         </div>
       </div>
     </>
