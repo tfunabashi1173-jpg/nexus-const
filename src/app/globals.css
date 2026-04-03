@@ -128,3 +128,31 @@
     @apply font-sans;
   }
 }
+
+@media print {
+  aside,
+  [data-no-print],
+  button:not([data-print-show]) {
+    display: none !important;
+  }
+  main {
+    margin-left: 0 !important;
+    padding-top: 0 !important;
+  }
+  body {
+    background: white !important;
+  }
+  .shadow-sm,
+  .shadow {
+    box-shadow: none !important;
+  }
+  table {
+    border-collapse: collapse;
+  }
+  th, td {
+    border: 1px solid #ccc;
+  }
+  .page-break-before {
+    page-break-before: always;
+  }
+}

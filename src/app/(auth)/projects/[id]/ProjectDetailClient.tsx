@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Trash2, Save, ExternalLink, X, Plus, Paperclip, ImageIcon, AlertTriangle } from 'lucide-react'
+import { Trash2, Save, ExternalLink, X, Plus, Paperclip, ImageIcon, AlertTriangle, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -550,7 +550,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
               </div>
               <div className="flex gap-2 pt-2">
                 <Button onClick={saveBasicInfo} disabled={isPending} className="gap-2">
-                  <Save className="h-4 w-4" />更新
+                  {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}更新
                 </Button>
                 {!confirmDelete ? (
                   <Button variant="outline" onClick={handleDelete} disabled={isPending} className="gap-2 text-destructive hover:text-destructive">
@@ -723,8 +723,31 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     setSelectedVendorId('')
   }
 
+  function exportExcel() {
+    import('xlsx').then(({ utils, writeFile }) => {
+      const header = ['業者', '合計', ...months]
+      const rows = [
+        ['合計', grandTotal, ...months.map(m => monthTotal(m))],
+        ...vendors.map(vid => [
+          partnerMap[vid] ?? '(不明)',
+          vendorTotals[vid],
+          ...months.map(m => cellTotal(vid, m)),
+        ]),
+      ]
+      const ws = utils.aoa_to_sheet([header, ...rows])
+      const wb = utils.book_new()
+      utils.book_append_sheet(wb, ws, '原価ピボット')
+      writeFile(wb, `原価_${projectId}_${new Date().toLocaleDateString('ja-JP').replace(/\//g, '')}.xlsx`)
+    })
+  }
+
   return (
     <>
+      <div className="flex justify-end mb-2">
+        <Button variant="outline" size="sm" onClick={exportExcel} className="text-xs h-7 gap-1.5">
+          📥 Excel出力
+        </Button>
+      </div>
       <div className="overflow-auto">
         <table className="border-collapse" style={{ fontSize: '10px' }}>
           <thead>

@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Bot, Pencil, Trash2, Paperclip, Plus, X } from 'lucide-react'
+import { Bot, Pencil, Trash2, Paperclip, Plus, X, Loader2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { InvoiceDetail } from '@/types'
 
@@ -108,10 +108,14 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
   const [filterMonth, setFilterMonth] = useState(prevMonthStr)
   const [deletedCostIds, setDeletedCostIds] = useState<Set<string>>(new Set())
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [costPage, setCostPage] = useState(0)
+  const COST_PAGE_SIZE = 50
   const filteredCosts = useMemo(() => {
     const base = filterMonth ? costs.filter(c => c.billing_month?.startsWith(filterMonth)) : costs
     return base.filter(c => !deletedCostIds.has(c.cost_id))
   }, [costs, filterMonth, deletedCostIds])
+  const totalPages = Math.ceil(filteredCosts.length / COST_PAGE_SIZE)
+  const paginatedCosts = filteredCosts.slice(costPage * COST_PAGE_SIZE, (costPage + 1) * COST_PAGE_SIZE)
 
   // 編集・削除
   const [editingCostId, setEditingCostId] = useState<string | null>(null)
@@ -308,6 +312,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
   }
 
   function deleteCost(id: string) {
+    setDeletedCostIds(prev => new Set([...prev, id])) // 楽観的削除
     startTransition(async () => {
       const res = await fetch('/api/costs', {
         method: 'DELETE',
@@ -315,10 +320,50 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
         body: JSON.stringify({ id }),
       })
       if (res.ok) {
-        setDeletedCostIds(prev => new Set([...prev, id]))
         toast.success('削除しました')
       } else {
+        setDeletedCostIds(prev => { const n = new Set(prev); n.delete(id); return n }) // ロールバック
         toast.error('削除に失敗しました')
+      }
+    })
+  }
+
+  // 一括割当
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkProjectId, setBulkProjectId] = useState('')
+  const unassignedCosts = useMemo(() => costs.filter(c => !c.project_id && !deletedCostIds.has(c.cost_id)), [costs, deletedCostIds])
+
+  function toggleBulkSelect(id: string) {
+    setBulkSelectedIds(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+
+  function assignBulk() {
+    if (!bulkProjectId || bulkSelectedIds.size === 0) {
+      toast.error('割当先の工事と原価を選択してください')
+      return
+    }
+    startTransition(async () => {
+      const ids = [...bulkSelectedIds]
+      const results = await Promise.all(ids.map(id =>
+        fetch('/api/costs', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, project_id: bulkProjectId }),
+        })
+      ))
+      const failed = results.filter(r => !r.ok).length
+      if (failed === 0) {
+        toast.success(`${ids.length}件の原価を割り当てました`)
+        setBulkSelectedIds(new Set())
+        setBulkProjectId('')
+        router.refresh()
+      } else {
+        toast.error(`${failed}件の割当に失敗しました`)
+        router.refresh()
       }
     })
   }
@@ -500,6 +545,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
           <TabsTrigger value="ocr"><Bot className="h-3.5 w-3.5 mr-1.5" />AI-OCR</TabsTrigger>
           <TabsTrigger value="list">原価一覧</TabsTrigger>
           <TabsTrigger value="monthly">月間集計</TabsTrigger>
+          <TabsTrigger value="bulk">一括割当</TabsTrigger>
         </TabsList>
 
         {/* 手動入力 */}
@@ -684,11 +730,18 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
               {/* 月フィルター */}
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <Label className="text-xs whitespace-nowrap">月フィルター:</Label>
-                <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="h-8 w-36 text-sm" />
+                <Input type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setCostPage(0) }} className="h-8 w-36 text-sm" />
                 {filterMonth && (
-                  <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setFilterMonth('')}>クリア</Button>
+                  <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => { setFilterMonth(''); setCostPage(0) }}>クリア</Button>
                 )}
                 <span className="text-xs text-muted-foreground">{filteredCosts.length}件</span>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1 ml-auto">
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={costPage === 0} onClick={() => setCostPage(p => p - 1)}>前へ</Button>
+                    <span className="text-xs text-muted-foreground">{costPage + 1} / {totalPages}</span>
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={costPage >= totalPages - 1} onClick={() => setCostPage(p => p + 1)}>次へ</Button>
+                  </div>
+                )}
               </div>
 
               <div className="overflow-auto max-h-[600px]">
@@ -712,7 +765,7 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredCosts.map((c, i) => (
+                    {paginatedCosts.map((c, i) => (
                       editingCostId === c.cost_id ? (
                         <tr key={c.cost_id} className="border-b bg-blue-50">
                           <td colSpan={6} className="py-3 px-3">
@@ -1003,12 +1056,19 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                         </tr>
                       )
                     ))}
-                    {filteredCosts.length === 0 && (
+                    {paginatedCosts.length === 0 && (
                       <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">データなし</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-3">
+                  <Button size="sm" variant="outline" className="h-7 px-3 text-xs" disabled={costPage === 0} onClick={() => setCostPage(p => p - 1)}>前へ</Button>
+                  <span className="text-xs text-muted-foreground">{costPage + 1} / {totalPages}ページ（{filteredCosts.length}件）</span>
+                  <Button size="sm" variant="outline" className="h-7 px-3 text-xs" disabled={costPage >= totalPages - 1} onClick={() => setCostPage(p => p + 1)}>次へ</Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1077,6 +1137,80 @@ export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) 
                 <Button variant="outline" size="sm" onClick={downloadMonthlyCsv}>
                   📥 査定表DL (CSV)
                 </Button>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        {/* 一括割当 */}
+        <TabsContent value="bulk">
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex-1 min-w-[200px]">
+                  <Label className="text-xs mb-1 block">割当先工事 <span className="text-destructive">*</span></Label>
+                  <Select value={bulkProjectId} onValueChange={v => setBulkProjectId(v ?? '')}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="工事を選択" /></SelectTrigger>
+                    <SelectContent>
+                      {projects.map(p => (
+                        <SelectItem key={p.project_id} value={p.project_id}>{p.project_id} {p.site_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="pt-5">
+                  <Button size="sm" onClick={assignBulk} disabled={isPending || bulkSelectedIds.size === 0 || !bulkProjectId}>
+                    {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                    選択した{bulkSelectedIds.size > 0 ? `${bulkSelectedIds.size}件を` : ''}割り当て
+                  </Button>
+                </div>
+                {bulkSelectedIds.size > 0 && (
+                  <Button size="sm" variant="ghost" className="pt-5 mt-auto" onClick={() => setBulkSelectedIds(new Set())}>選択解除</Button>
+                )}
+              </div>
+
+              {unassignedCosts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">工事未割当の原価データはありません</p>
+              ) : (
+                <div className="overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-800 text-white sticky top-0 z-10">
+                        <th className="py-2.5 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5"
+                            checked={unassignedCosts.length > 0 && bulkSelectedIds.size === unassignedCosts.length}
+                            onChange={e => setBulkSelectedIds(e.target.checked ? new Set(unassignedCosts.map(c => c.cost_id)) : new Set())}
+                          />
+                        </th>
+                        <th className="text-left py-2.5 px-3 font-medium">請求月</th>
+                        <th className="text-left py-2.5 px-3 font-medium">業者</th>
+                        <th className="text-right py-2.5 px-3 font-medium">金額</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unassignedCosts.map((c, i) => (
+                        <tr
+                          key={c.cost_id}
+                          className={`border-b last:border-0 cursor-pointer transition-colors ${bulkSelectedIds.has(c.cost_id) ? 'bg-blue-50' : i % 2 === 1 ? 'bg-slate-50 hover:bg-blue-50' : 'bg-white hover:bg-blue-50'}`}
+                          onClick={() => toggleBulkSelect(c.cost_id)}
+                        >
+                          <td className="py-2 px-3" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5"
+                              checked={bulkSelectedIds.has(c.cost_id)}
+                              onChange={() => toggleBulkSelect(c.cost_id)}
+                            />
+                          </td>
+                          <td className="py-2 px-3">{c.billing_month?.slice(0, 7)}</td>
+                          <td className="py-2 px-3">{normalizeCompanyName(vendorMap[c.vendor_id] ?? c.vendor_id)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums">{formatYenFull(c.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardContent>
           </Card>

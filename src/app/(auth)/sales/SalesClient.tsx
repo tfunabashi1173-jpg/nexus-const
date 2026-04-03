@@ -12,7 +12,7 @@ import { AmountInput } from '@/components/ui/amount-input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Plus } from 'lucide-react'
+import { Pencil, Trash2, Plus, Loader2 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
@@ -113,6 +113,7 @@ export function SalesClient({ sales, projects }: Props) {
   }
 
   function deleteSale(id: string) {
+    setDeletedSaleIds(prev => new Set([...prev, id])) // 楽観的削除
     startTransition(async () => {
       const res = await fetch('/api/sales', {
         method: 'DELETE',
@@ -120,9 +121,9 @@ export function SalesClient({ sales, projects }: Props) {
         body: JSON.stringify({ id }),
       })
       if (res.ok) {
-        setDeletedSaleIds(prev => new Set([...prev, id]))
         toast.success('削除しました')
       } else {
+        setDeletedSaleIds(prev => { const n = new Set(prev); n.delete(id); return n }) // ロールバック
         toast.error('削除に失敗しました')
       }
     })
@@ -212,7 +213,9 @@ export function SalesClient({ sales, projects }: Props) {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={addSale} disabled={isPending}>登録</Button>
+              <Button size="sm" onClick={addSale} disabled={isPending}>
+                {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}登録
+              </Button>
               <Button size="sm" variant="ghost" onClick={() => setShowNewForm(false)}>キャンセル</Button>
             </div>
           </CardContent>
@@ -302,7 +305,9 @@ export function SalesClient({ sales, projects }: Props) {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button onClick={handleDeposit} disabled={isPending}>入金消込</Button>
+                        <Button onClick={handleDeposit} disabled={isPending}>
+                          {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}入金消込
+                        </Button>
                         <Button variant="ghost" onClick={() => setSelectedId(null)}>キャンセル</Button>
                       </div>
                     </div>

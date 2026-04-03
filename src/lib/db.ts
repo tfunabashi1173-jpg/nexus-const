@@ -30,7 +30,7 @@ async function fetchProjectsImpl(): Promise<Project[]> {
 
 export const fetchProjects = unstable_cache(fetchProjectsImpl, ['projects'], {
   tags: ['projects'],
-  revalidate: 30,
+  revalidate: 300,
 })
 
 export async function fetchProject(id: string): Promise<Project | null> {
@@ -69,14 +69,17 @@ export async function updateProject(id: string, updates: Partial<Project>) {
 }
 
 export async function softDeleteProject(id: string) {
+  const now = formatDateLocal(new Date())
+  // 追加工事を先に論理削除（失敗時はプロジェクト削除しない）
+  const { error: addonError } = await supabase()
+    .from('addons')
+    .update({ is_deleted: true, deleted_at: now })
+    .eq('project_id', id)
+  if (addonError) return { error: addonError }
+
   const { error } = await supabase()
     .from('projects')
-    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
-    .eq('project_id', id)
-  // 追加工事も論理削除
-  await supabase()
-    .from('addons')
-    .update({ is_deleted: true, deleted_at: formatDateLocal(new Date()) })
+    .update({ is_deleted: true, deleted_at: now })
     .eq('project_id', id)
   if (!error) {
     invalidate('projects')
@@ -162,7 +165,7 @@ async function fetchSalesImpl(): Promise<Sale[]> {
 
 export const fetchSales = unstable_cache(fetchSalesImpl, ['sales'], {
   tags: ['sales'],
-  revalidate: 30,
+  revalidate: 300,
 })
 
 export async function fetchSalesByProject(projectId: string): Promise<Sale[]> {
@@ -234,7 +237,7 @@ async function fetchCostsImpl(): Promise<Cost[]> {
 
 export const fetchCosts = unstable_cache(fetchCostsImpl, ['costs'], {
   tags: ['costs'],
-  revalidate: 30,
+  revalidate: 300,
 })
 
 export async function fetchCostsByProject(projectId: string): Promise<Cost[]> {
@@ -761,7 +764,7 @@ export function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<Dashboa
   return unstable_cache(
     () => getDashboardSummaryImpl(s, e),
     ['dashboard-summary', s, e],
-    { tags: ['dashboard'], revalidate: 10 }
+    { tags: ['dashboard'], revalidate: 60 }
   )()
 }
 
@@ -837,7 +840,7 @@ export function getRevenueSummary(fyStart: Date, fyEnd: Date): Promise<RevenueSu
   return unstable_cache(
     () => getRevenueSummaryImpl(s, e),
     ['revenue-summary', s, e],
-    { tags: ['revenue'], revalidate: 30 }
+    { tags: ['revenue'], revalidate: 300 }
   )()
 }
 

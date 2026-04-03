@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 
 interface Props {
   customers: Partner[]
@@ -37,6 +38,15 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
+  // バリデーション: touched フラグ
+  const [touched, setTouched] = useState({ siteName: false, customerId: false, managerId: false, amount: false })
+  const errors = {
+    siteName: touched.siteName && !siteName ? '現場名を入力してください' : '',
+    customerId: touched.customerId && !customerId ? '得意先を選択してください' : '',
+    managerId: touched.managerId && !managerId ? '担当者を選択してください' : '',
+    amount: touched.amount && (parseInt(amount.replace(/,/g, '')) || 0) <= 0 ? '請負金額を入力してください' : '',
+  }
+
   // 入金予定日の自動計算
   const scheduledDepositDate = (() => {
     if (!customerId || !endDate) return null
@@ -51,6 +61,7 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
   })()
 
   function handleSubmit() {
+    setTouched({ siteName: true, customerId: true, managerId: true, amount: true })
     if (!siteName) { toast.error('現場名を入力してください'); return }
     if (!customerId) { toast.error('得意先を選択してください'); return }
     if (!managerId) { toast.error('担当者を選択してください'); return }
@@ -112,7 +123,8 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
             </div>
             <div className="space-y-1.5 md:col-span-2">
               <Label>現場名 <span className="text-destructive">*</span></Label>
-              <Input value={siteName} onChange={e => setSiteName(e.target.value)} placeholder="例: ○○ビル改修工事" />
+              <Input value={siteName} onChange={e => setSiteName(e.target.value)} onBlur={() => setTouched(t => ({...t, siteName: true}))} placeholder="例: ○○ビル改修工事" className={errors.siteName ? 'border-destructive' : ''} />
+              {errors.siteName && <p className="text-xs text-destructive">{errors.siteName}</p>}
             </div>
             <div className="space-y-1.5 md:col-span-2">
               <Label>現場住所</Label>
@@ -120,12 +132,13 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
             </div>
             <div className="space-y-1.5">
               <Label>得意先 <span className="text-destructive">*</span></Label>
-              <Select value={customerId} onValueChange={(v) => setCustomerId(v ?? "")}>
-                <SelectTrigger><SelectValue placeholder="得意先を選択" /></SelectTrigger>
+              <Select value={customerId} onValueChange={(v) => { setCustomerId(v ?? ""); setTouched(t => ({...t, customerId: true})) }}>
+                <SelectTrigger className={errors.customerId ? 'border-destructive' : ''}><SelectValue placeholder="得意先を選択" /></SelectTrigger>
                 <SelectContent>
                   {customers.map(c => <SelectItem key={c.partner_id} value={c.partner_id}>{normalizeCompanyName(c.name)}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {errors.customerId && <p className="text-xs text-destructive">{errors.customerId}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>得意先担当者名</Label>
@@ -133,16 +146,18 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
             </div>
             <div className="space-y-1.5">
               <Label>本工事請負金額（税抜）<span className="text-destructive">*</span></Label>
-              <AmountInput value={amount} onChange={setAmount} />
+              <AmountInput value={amount} onChange={v => { setAmount(v); setTouched(t => ({...t, amount: true})) }} className={errors.amount ? 'border-destructive' : ''} />
+              {errors.amount && <p className="text-xs text-destructive">{errors.amount}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>担当者 <span className="text-destructive">*</span></Label>
-              <Select value={managerId} onValueChange={(v) => setManagerId(v ?? "")}>
-                <SelectTrigger><SelectValue placeholder="担当者を選択" /></SelectTrigger>
+              <Select value={managerId} onValueChange={(v) => { setManagerId(v ?? ""); setTouched(t => ({...t, managerId: true})) }}>
+                <SelectTrigger className={errors.managerId ? 'border-destructive' : ''}><SelectValue placeholder="担当者を選択" /></SelectTrigger>
                 <SelectContent>
                   {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {errors.managerId && <p className="text-xs text-destructive">{errors.managerId}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>建物構造</Label>
@@ -170,6 +185,7 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
           )}
 
           <Button onClick={handleSubmit} disabled={isPending} className="w-full" size="lg">
+            {isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             {isPending ? '登録中...' : '登録する'}
           </Button>
         </CardContent>
