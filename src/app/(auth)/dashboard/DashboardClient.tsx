@@ -1,12 +1,15 @@
 'use client'
 
-import { use, useMemo, useState, useEffect, Suspense } from 'react'
+import { use, useMemo, useState, useEffect, useTransition, Suspense } from 'react'
 import Link from 'next/link'
-import { Project, Addon, Partner, DashboardSummary } from '@/types'
+import { useRouter } from 'next/navigation'
+import { Project, Addon, Partner, Sale, DashboardSummary } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYen, formatYenFull } from '@/lib/utils/date'
 import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -23,9 +26,15 @@ import {
   ResponsiveContainer,
   LabelList,
 } from 'recharts'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMasked } from '@/lib/hooks/use-masked'
+
+type AlertItems = {
+  unpaid_sales: Sale[]
+  unbilled_costs: { project_id: string; site_name: string; cost_total: number; sales_total: number }[]
+  orphaned_costs: { cost_id: string }[]
+}
 
 interface Props {
   projects: Project[]
@@ -33,9 +42,10 @@ interface Props {
   partners: Partner[]
   summaryPromise: Promise<DashboardSummary>
   fiscalStartMonth: number
+  alertItems: AlertItems
 }
 
-export function DashboardClient({ projects, addons, partners, summaryPromise, fiscalStartMonth }: Props) {
+export function DashboardClient({ projects, addons, partners, summaryPromise, fiscalStartMonth, alertItems }: Props) {
   const today = new Date()
   const currentFY = getFiscalYear(today, fiscalStartMonth)
   const [selectedFY, setSelectedFY] = useState(currentFY)
@@ -98,6 +108,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
           overrideSummary={overrideSummary}
           masked={masked}
           projects={projects}
+          alertItems={alertItems}
         />
       </Suspense>
 
@@ -162,12 +173,15 @@ function KpiContent({
   overrideSummary,
   masked,
   projects,
+  alertItems,
 }: {
   summaryPromise: Promise<DashboardSummary>
   overrideSummary: DashboardSummary | null
   masked: boolean
   projects: Project[]
+  alertItems: AlertItems
 }) {
+  const router = useRouter()
   const initialSummary = use(summaryPromise)
   const summary = overrideSummary ?? initialSummary
 
@@ -184,6 +198,31 @@ function KpiContent({
     p.scheduled_deposit_date < todayStr &&
     p.status !== '入金済'
   )
+
+  const projectMap = useMemo(
+    () => Object.fromEntries(projects.map(p => [p.project_id, p.site_name])),
+    [projects]
+  )
+
+  const [openDialog, setOpenDialog] = useState<'unpaid' | 'unbilled' | 'overdue' | null>(null)
+  const [removedSaleIds, setRemovedSaleIds] = useState<Set<string>>(new Set())
+
+  const displayedUnpaidSales = alertItems.unpaid_sales.filter(s => !removedSaleIds.has(s.sales_id))
+
+  async function handleDeposit(saleId: string, depositDate: string) {
+    const res = await fetch('/api/sales', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: saleId, deposit_status: true, deposit_date: depositDate }),
+    })
+    if (res.ok) {
+      setRemovedSaleIds(prev => new Set([...prev, saleId]))
+      toast.success('入金消込しました')
+      router.refresh()
+    } else {
+      toast.error('更新に失敗しました')
+    }
+  }
 
   const hasAlerts = alerts.unpaid_sales > 0 || alerts.orphaned_costs > 0 || alerts.unbilled_costs > 0 || overdueDeposit.length > 0
 
@@ -202,19 +241,19 @@ function KpiContent({
                 </Link>
               )}
               {alerts.unpaid_sales > 0 && (
-                <Link href="/sales" className="underline underline-offset-2 hover:opacity-80">
+                <button onClick={() => setOpenDialog('unpaid')} className="underline underline-offset-2 hover:opacity-80 text-left">
                   💰 未入金: <strong>{alerts.unpaid_sales}件</strong> →入金消込
-                </Link>
+                </button>
               )}
               {alerts.unbilled_costs > 0 && (
-                <Link href="/projects" className="underline underline-offset-2 hover:opacity-80">
+                <button onClick={() => setOpenDialog('unbilled')} className="underline underline-offset-2 hover:opacity-80 text-left">
                   📋 未請求現場: <strong>{alerts.unbilled_costs}件</strong> →工事一覧
-                </Link>
+                </button>
               )}
               {overdueDeposit.length > 0 && (
-                <Link href="/projects?status=完工" className="underline underline-offset-2 hover:opacity-80">
+                <button onClick={() => setOpenDialog('overdue')} className="underline underline-offset-2 hover:opacity-80 text-left">
                   🗓️ 入金予定日超過: <strong>{overdueDeposit.length}件</strong>（{overdueDeposit.slice(0, 2).map(p => p.site_name).join('、')}{overdueDeposit.length > 2 ? '…' : ''}）
-                </Link>
+                </button>
               )}
             </div>
           </AlertDescription>
@@ -235,7 +274,174 @@ function KpiContent({
           <p className="text-3xl font-bold mt-2 tabular-nums">{totalProfit >= 0 ? '+' : '▲'}{fmt(Math.abs(totalProfit))}</p>
         </div>
       </div>
+
+      {/* 未入金ダイアログ */}
+      <Dialog open={openDialog === 'unpaid'} onOpenChange={open => !open && setOpenDialog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader className="flex flex-row items-center justify-between mb-3">
+            <DialogTitle>未入金一覧</DialogTitle>
+            <DialogClose className="text-slate-400 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </DialogClose>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh]">
+            {displayedUnpaidSales.length === 0 ? (
+              <p className="text-sm text-slate-500 py-6 text-center">未入金の請求はありません</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-800 text-white sticky top-0">
+                    <th className="text-left py-2 px-3 font-medium">現場名</th>
+                    <th className="text-left py-2 px-3 font-medium">請求日</th>
+                    <th className="text-right py-2 px-3 font-medium">金額</th>
+                    <th className="py-2 px-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedUnpaidSales.map((sale, i) => (
+                    <UnpaidSaleRow
+                      key={sale.sales_id}
+                      sale={sale}
+                      projectName={projectMap[sale.project_id] ?? '(不明)'}
+                      masked={masked}
+                      stripe={i % 2 === 1}
+                      onDeposit={handleDeposit}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 未請求現場ダイアログ */}
+      <Dialog open={openDialog === 'unbilled'} onOpenChange={open => !open && setOpenDialog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader className="flex flex-row items-center justify-between mb-3">
+            <DialogTitle>未請求現場一覧</DialogTitle>
+            <DialogClose className="text-slate-400 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </DialogClose>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-800 text-white sticky top-0">
+                  <th className="text-left py-2 px-3 font-medium">現場名</th>
+                  <th className="text-right py-2 px-3 font-medium">原価合計</th>
+                  <th className="py-2 px-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {alertItems.unbilled_costs.map((item, i) => (
+                  <tr key={item.project_id} className={`${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'} hover:bg-blue-50`}>
+                    <td className="py-2.5 px-3">{item.site_name}</td>
+                    <td className="py-2.5 px-3 text-right tabular-nums">{masked ? '¥ ****' : formatYenFull(item.cost_total)}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <Link href={`/projects/${item.project_id}`} className="text-blue-600 text-xs hover:underline whitespace-nowrap">詳細 →</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 入金予定日超過ダイアログ */}
+      <Dialog open={openDialog === 'overdue'} onOpenChange={open => !open && setOpenDialog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader className="flex flex-row items-center justify-between mb-3">
+            <DialogTitle>入金予定日超過一覧</DialogTitle>
+            <DialogClose className="text-slate-400 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </DialogClose>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-800 text-white sticky top-0">
+                  <th className="text-left py-2 px-3 font-medium">現場名</th>
+                  <th className="text-left py-2 px-3 font-medium">入金予定日</th>
+                  <th className="text-right py-2 px-3 font-medium">請負金額</th>
+                  <th className="py-2 px-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {overdueDeposit.map((p, i) => (
+                  <tr key={p.project_id} className={`${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'} hover:bg-blue-50`}>
+                    <td className="py-2.5 px-3">{p.site_name}</td>
+                    <td className="py-2.5 px-3 text-red-600 font-medium whitespace-nowrap">{p.scheduled_deposit_date}</td>
+                    <td className="py-2.5 px-3 text-right tabular-nums">{masked ? '¥ ****' : formatYenFull(p.contract_amount)}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <Link href={`/projects/${p.project_id}`} className="text-blue-600 text-xs hover:underline whitespace-nowrap">詳細 →</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
+  )
+}
+
+// ---- 未入金行コンポーネント ----
+
+function UnpaidSaleRow({
+  sale,
+  projectName,
+  masked,
+  stripe,
+  onDeposit,
+}: {
+  sale: Sale
+  projectName: string
+  masked: boolean
+  stripe: boolean
+  onDeposit: (saleId: string, depositDate: string) => Promise<void>
+}) {
+  const [showForm, setShowForm] = useState(false)
+  const [depositDate, setDepositDate] = useState(formatDateLocal(new Date()))
+  const [isPending, startTransition] = useTransition()
+
+  function submit() {
+    startTransition(async () => {
+      await onDeposit(sale.sales_id, depositDate)
+      setShowForm(false)
+    })
+  }
+
+  return (
+    <tr className={`${stripe ? 'bg-slate-50' : 'bg-white'} hover:bg-blue-50`}>
+      <td className="py-2.5 px-3">{projectName}</td>
+      <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{sale.billing_date}</td>
+      <td className="py-2.5 px-3 text-right tabular-nums">{masked ? '¥ ****' : formatYenFull(sale.amount)}</td>
+      <td className="py-2.5 px-3 text-right">
+        {showForm ? (
+          <div className="flex items-center justify-end gap-1">
+            <input
+              type="date"
+              value={depositDate}
+              onChange={e => setDepositDate(e.target.value)}
+              className="border border-slate-300 rounded px-1.5 py-0.5 text-xs w-32 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <Button size="sm" className="h-6 text-xs px-2 py-0" onClick={submit} disabled={isPending}>
+              {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '確定'}
+            </Button>
+            <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600 ml-1">
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <Button variant="outline" size="sm" className="h-6 text-xs px-2 py-0" onClick={() => setShowForm(true)}>
+            入金消込
+          </Button>
+        )}
+      </td>
+    </tr>
   )
 }
 
