@@ -8,6 +8,9 @@ export async function POST() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const result = await autoUpdateStatuses()
-  if (result.updated) revalidateTag('projects', {})
+  // ステータス変更の有無に関わらず常にキャッシュをクリア
+  // （DB一時障害後に空リストがキャッシュされた場合の手動回復手段として機能させる）
+  revalidateTag('projects', {})
+  revalidateTag('dashboard', {})
   return NextResponse.json(result)
 }

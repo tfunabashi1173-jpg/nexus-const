@@ -49,6 +49,9 @@ async function fetchProjectsImpl(): Promise<Project[]> {
   if (error) {
     console.error('[fetchProjects] Supabase error:', error.message)
     await insertSystemLog('error', 'projects', error.message, { code: error.code })
+    // エラー時はthrowしてunstable_cacheにキャッシュさせない
+    // （空配列を返すとキャッシュされ、DB回復後も5分間空リストが表示され続ける）
+    throw new Error(`fetchProjects failed: ${error.message}`)
   }
   if (!data) return []
   return data.map((p: any) => ({
@@ -147,6 +150,7 @@ async function fetchPartnersImpl(): Promise<Partner[]> {
   if (error) {
     console.error('[fetchPartners] Supabase error:', error.message)
     await insertSystemLog('error', 'partners', error.message, { code: error.code })
+    throw new Error(`fetchPartners failed: ${error.message}`)
   }
   return data ?? []
 }
@@ -196,6 +200,7 @@ async function fetchSalesImpl(): Promise<Sale[]> {
   if (error) {
     console.error('[fetchSales] Supabase error:', error.message)
     await insertSystemLog('error', 'sales', error.message, { code: error.code })
+    throw new Error(`fetchSales failed: ${error.message}`)
   }
   return data ?? []
 }
@@ -272,6 +277,7 @@ async function fetchCostsImpl(): Promise<Cost[]> {
   if (error) {
     console.error('[fetchCosts] Supabase error:', error.message)
     await insertSystemLog('error', 'costs', error.message, { code: error.code })
+    throw new Error(`fetchCosts failed: ${error.message}`)
   }
   return data ?? []
 }
