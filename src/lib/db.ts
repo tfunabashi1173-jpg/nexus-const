@@ -11,6 +11,31 @@ const ACTIVE = 'is_deleted.is.null,is_deleted.eq.false'
 const invalidate = (tag: string) => revalidateTag(tag, {})
 
 // ==========================================
+// Retry helper（一時的なDB接続エラーのみリトライ）
+// ==========================================
+function isTransientError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /ECONNREFUSED|ETIMEDOUT|ENOTFOUND|fetch failed|network|connection|timeout/i.test(msg)
+}
+
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+      if (attempt < maxRetries && isTransientError(err)) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)))
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastError
+}
+
+// ==========================================
 // System Log（ユーザーセッション不要）
 // ==========================================
 export async function insertSystemLog(
@@ -39,25 +64,25 @@ export async function insertSystemLog(
 // Projects
 // ==========================================
 async function fetchProjectsImpl(): Promise<Project[]> {
-  const end = perfStart('fetchProjects')
-  const { data, error } = await supabase()
-    .from('projects')
-    .select('*, users(username)')
-    .or(ACTIVE)
-    .order('start_date', { ascending: false })
-  end()
-  if (error) {
-    console.error('[fetchProjects] Supabase error:', error.message)
-    await insertSystemLog('error', 'projects', error.message, { code: error.code })
-    // エラー時はthrowしてunstable_cacheにキャッシュさせない
-    // （空配列を返すとキャッシュされ、DB回復後も5分間空リストが表示され続ける）
-    throw new Error(`fetchProjects failed: ${error.message}`)
-  }
-  if (!data) return []
-  return data.map((p: any) => ({
-    ...p,
-    manager_name: p.users?.username ?? p.manager_id,
-  }))
+  return withRetry(async () => {
+    const end = perfStart('fetchProjects')
+    const { data, error } = await supabase()
+      .from('projects')
+      .select('*, users(username)')
+      .or(ACTIVE)
+      .order('start_date', { ascending: false })
+    end()
+    if (error) {
+      console.error('[fetchProjects] Supabase error:', error.message)
+      await insertSystemLog('error', 'projects', error.message, { code: error.code })
+      throw new Error(`fetchProjects failed: ${error.message}`)
+    }
+    if (!data) return []
+    return data.map((p: any) => ({
+      ...p,
+      manager_name: p.users?.username ?? p.manager_id,
+    }))
+  })
 }
 
 export const fetchProjects = unstable_cache(fetchProjectsImpl, ['projects'], {
@@ -140,19 +165,21 @@ export async function getNextProjectId(): Promise<string> {
 // Partners
 // ==========================================
 async function fetchPartnersImpl(): Promise<Partner[]> {
-  const end = perfStart('fetchPartners')
-  const { data, error } = await supabase()
-    .from('partners')
-    .select('*')
-    .or(ACTIVE)
-    .order('name')
-  end()
-  if (error) {
-    console.error('[fetchPartners] Supabase error:', error.message)
-    await insertSystemLog('error', 'partners', error.message, { code: error.code })
-    throw new Error(`fetchPartners failed: ${error.message}`)
-  }
-  return data ?? []
+  return withRetry(async () => {
+    const end = perfStart('fetchPartners')
+    const { data, error } = await supabase()
+      .from('partners')
+      .select('*')
+      .or(ACTIVE)
+      .order('name')
+    end()
+    if (error) {
+      console.error('[fetchPartners] Supabase error:', error.message)
+      await insertSystemLog('error', 'partners', error.message, { code: error.code })
+      throw new Error(`fetchPartners failed: ${error.message}`)
+    }
+    return data ?? []
+  })
 }
 
 export const fetchPartners = unstable_cache(fetchPartnersImpl, ['partners'], {
@@ -190,19 +217,21 @@ export async function softDeletePartner(id: string) {
 // Sales
 // ==========================================
 async function fetchSalesImpl(): Promise<Sale[]> {
-  const end = perfStart('fetchSales')
-  const { data, error } = await supabase()
-    .from('sales')
-    .select('*')
-    .or(ACTIVE)
-    .order('billing_date', { ascending: false })
-  end()
-  if (error) {
-    console.error('[fetchSales] Supabase error:', error.message)
-    await insertSystemLog('error', 'sales', error.message, { code: error.code })
-    throw new Error(`fetchSales failed: ${error.message}`)
-  }
-  return data ?? []
+  return withRetry(async () => {
+    const end = perfStart('fetchSales')
+    const { data, error } = await supabase()
+      .from('sales')
+      .select('*')
+      .or(ACTIVE)
+      .order('billing_date', { ascending: false })
+    end()
+    if (error) {
+      console.error('[fetchSales] Supabase error:', error.message)
+      await insertSystemLog('error', 'sales', error.message, { code: error.code })
+      throw new Error(`fetchSales failed: ${error.message}`)
+    }
+    return data ?? []
+  })
 }
 
 export const fetchSales = unstable_cache(fetchSalesImpl, ['sales'], {
@@ -262,24 +291,26 @@ export async function softDeleteSale(id: string) {
 // Costs
 // ==========================================
 async function fetchCostsImpl(): Promise<Cost[]> {
-  const end = perfStart('fetchCosts')
-  // 36ヶ月分に絞り込み（全件取得によるパフォーマンス劣化を防止）
-  const cutoff = new Date()
-  cutoff.setMonth(cutoff.getMonth() - 36)
-  const cutoffStr = formatDateLocal(new Date(cutoff.getFullYear(), cutoff.getMonth(), 1))
-  const { data, error } = await supabase()
-    .from('costs')
-    .select('*')
-    .or(ACTIVE)
-    .gte('billing_month', cutoffStr)
-    .order('billing_month', { ascending: false })
-  end()
-  if (error) {
-    console.error('[fetchCosts] Supabase error:', error.message)
-    await insertSystemLog('error', 'costs', error.message, { code: error.code })
-    throw new Error(`fetchCosts failed: ${error.message}`)
-  }
-  return data ?? []
+  return withRetry(async () => {
+    const end = perfStart('fetchCosts')
+    // 36ヶ月分に絞り込み（全件取得によるパフォーマンス劣化を防止）
+    const cutoff = new Date()
+    cutoff.setMonth(cutoff.getMonth() - 36)
+    const cutoffStr = formatDateLocal(new Date(cutoff.getFullYear(), cutoff.getMonth(), 1))
+    const { data, error } = await supabase()
+      .from('costs')
+      .select('*')
+      .or(ACTIVE)
+      .gte('billing_month', cutoffStr)
+      .order('billing_month', { ascending: false })
+    end()
+    if (error) {
+      console.error('[fetchCosts] Supabase error:', error.message)
+      await insertSystemLog('error', 'costs', error.message, { code: error.code })
+      throw new Error(`fetchCosts failed: ${error.message}`)
+    }
+    return data ?? []
+  })
 }
 
 export const fetchCosts = unstable_cache(fetchCostsImpl, ['costs'], {
