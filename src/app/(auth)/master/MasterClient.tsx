@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { Trash2, Plus, Pencil, Check, X, Download, Search, Eye, EyeOff } from 'lucide-react'
 import { formatDateLocal } from '@/lib/utils/date'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface Props {
   users: User[]
@@ -134,6 +135,10 @@ export function MasterClient({ users, partners, logs, fiscalStartMonth, safetyFe
       }
     })
   }
+
+  // 取引先削除確認
+  const [confirmDeletePartnerId, setConfirmDeletePartnerId] = useState<string | null>(null)
+  const confirmDeletePartner = partners.find(p => p.partner_id === confirmDeletePartnerId)
 
   // 取引先編集
   const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null)
@@ -372,6 +377,7 @@ export function MasterClient({ users, partners, logs, fiscalStartMonth, safetyFe
       } else {
         toast.error('削除に失敗しました')
       }
+      setConfirmDeletePartnerId(null)
     })
   }
 
@@ -481,6 +487,14 @@ export function MasterClient({ users, partners, logs, fiscalStartMonth, safetyFe
 
   return (
     <div className="space-y-4">
+      <ConfirmDialog
+        open={!!confirmDeletePartnerId}
+        onOpenChange={open => { if (!open) setConfirmDeletePartnerId(null) }}
+        title="取引先を削除しますか？"
+        description={confirmDeletePartner ? `「${confirmDeletePartner.name}」を削除します。この操作はゴミ箱から復元できます。` : ''}
+        confirmLabel="削除"
+        onConfirm={() => confirmDeletePartnerId && deletePartner(confirmDeletePartnerId)}
+      />
       <h1 className="text-2xl font-bold">⚙️ マスタ管理</h1>
 
       <Tabs defaultValue="users">
@@ -860,7 +874,7 @@ export function MasterClient({ users, partners, logs, fiscalStartMonth, safetyFe
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500" onClick={() => startEditPartner(p)} disabled={isPending}>
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deletePartner(p.partner_id)} disabled={isPending}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setConfirmDeletePartnerId(p.partner_id)} disabled={isPending}>
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </td>
