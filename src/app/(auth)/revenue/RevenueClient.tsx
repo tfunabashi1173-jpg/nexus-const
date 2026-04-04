@@ -286,7 +286,7 @@ export function RevenueClient({
 type AnnualRow = RevenueSummary['annual'][number]
 
 type SubAllocation = { uid: string; name: string; sales: number; costs: number; profit: number }
-type AllocatedRow = AnnualRow & { isSubManager: boolean; subAllocations: SubAllocation[] }
+type AllocatedRow = AnnualRow & { isSubManager: boolean; subAllocations: SubAllocation[]; actualSales: number; actualCosts: number }
 
 function StaffSummaryTable({
   annualData,
@@ -381,7 +381,7 @@ function StaffSummaryTable({
     const mainS = salesAlloc[mainId] ?? 0
     const mainC = costsAlloc[mainId] ?? 0
     if (!staffMap[mainId]) staffMap[mainId] = { name: userMap[mainId] ?? mainId, rows: [], sales: 0, costs: 0, profit: 0 }
-    staffMap[mainId].rows.push({ ...row, sales: mainS, costs: mainC, profit: mainS - mainC, isSubManager: false, subAllocations })
+    staffMap[mainId].rows.push({ ...row, sales: mainS, costs: mainC, profit: mainS - mainC, isSubManager: false, subAllocations, actualSales: row.sales, actualCosts: row.costs })
     staffMap[mainId].sales  += mainS
     staffMap[mainId].costs  += mainC
     staffMap[mainId].profit += mainS - mainC
@@ -392,7 +392,7 @@ function StaffSummaryTable({
       const allocC = costsAlloc[uid] ?? 0
       const name = userMap[uid] ?? uid
       if (!staffMap[uid]) staffMap[uid] = { name, rows: [], sales: 0, costs: 0, profit: 0 }
-      staffMap[uid].rows.push({ ...row, sales: allocS, costs: allocC, profit: allocS - allocC, isSubManager: true, subAllocations: [] })
+      staffMap[uid].rows.push({ ...row, sales: allocS, costs: allocC, profit: allocS - allocC, isSubManager: true, subAllocations: [], actualSales: row.sales, actualCosts: row.costs })
       staffMap[uid].sales  += allocS
       staffMap[uid].costs  += allocC
       staffMap[uid].profit += allocS - allocC
@@ -450,9 +450,16 @@ function StaffSummaryTable({
                 <Fragment key={r.project_id + (r.isSubManager ? '-sub' : '')}>
                   <tr className="border-b bg-blue-50/40 text-xs">
                     <td className="py-1.5 px-3 pl-8 text-muted-foreground">
-                      {r.site_name}
-                      {r.isSubManager && (
-                        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">副</span>
+                      <div>
+                        {r.site_name}
+                        {r.isSubManager && (
+                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">副</span>
+                        )}
+                      </div>
+                      {r.subAllocations.length > 0 && (
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          実売上: {fmt(r.actualSales)} / 実原価: {fmt(r.actualCosts)}
+                        </div>
                       )}
                     </td>
                     <td className="py-1.5 px-3 text-right text-muted-foreground">—</td>
