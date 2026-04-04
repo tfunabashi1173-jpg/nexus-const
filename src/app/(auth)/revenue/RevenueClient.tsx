@@ -201,8 +201,8 @@ export function RevenueClient({
                 <BarChart data={monthlyTrendData} margin={{ left: 10, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={v => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: any) => `¥${v.toLocaleString()}`} />
+                  <YAxis tickFormatter={v => masked ? '***' : `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: any) => masked ? '¥ ****' : `¥${v.toLocaleString()}`} />
                   <Legend />
                   <Bar dataKey="売上" fill="#3b82f6" />
                   <Bar dataKey="原価" fill="#ef4444" />

@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo, useRef, useEffect } from 'react'
 import { Project, Cost, Sale, Addon, Partner, User, ProjectSubManager, TaxType } from '@/types'
 import { formatYenFull, formatDateLocal } from '@/lib/utils/date'
+import { useMasked } from '@/lib/hooks/use-masked'
 import { AmountInput } from '@/components/ui/amount-input'
 import { normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -34,6 +35,8 @@ const STRUCTURES = ['RC造', 'S造', '木造', 'SRC造', '軽量鉄骨造', 'そ
 export function ProjectDetailClient({ project, costs, sales, addons, partners, users, subManagers: initialSubManagers }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [masked] = useMasked()
+  const fmt = (v: number) => masked ? '¥ ****' : formatYenFull(v)
 
   // 基本情報の編集状態
   const [siteName, setSiteName] = useState(project.site_name)
@@ -247,10 +250,10 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
 
         {/* KPI */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <KpiCard label="契約金額（追加含む）" value={formatYenFull(totalContract)} />
-          <KpiCard label="請求済売上" value={formatYenFull(salesSum)} />
-          <KpiCard label="原価合計" value={formatYenFull(costsSum)} />
-          <KpiCard label="予想粗利" value={formatYenFull(profit)} highlight={profit >= 0} sub={salesSum !== 0 ? `(${(profit / salesSum * 100).toFixed(1)}%)` : undefined} />
+          <KpiCard label="契約金額（追加含む）" value={fmt(totalContract)} />
+          <KpiCard label="請求済売上" value={fmt(salesSum)} />
+          <KpiCard label="原価合計" value={fmt(costsSum)} />
+          <KpiCard label="予想粗利" value={fmt(profit)} highlight={profit >= 0} sub={salesSum !== 0 ? `(${(profit / salesSum * 100).toFixed(1)}%)` : undefined} />
         </div>
 
         {/* 予算超過アラート */}
@@ -258,8 +261,8 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
           <Alert variant="destructive" className="mb-3">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              原価合計（{formatYenFull(costsSum)}）が契約金額（{formatYenFull(totalContract)}）を
-              <strong> {formatYenFull(costsSum - totalContract)} 超過</strong>しています。
+              原価合計（{fmt(costsSum)}）が契約金額（{fmt(totalContract)}）を
+              <strong> {fmt(costsSum - totalContract)} 超過</strong>しています。
             </AlertDescription>
           </Alert>
         )}
@@ -295,9 +298,9 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                         {p.name}
                         {p.isMain && <span className="ml-1.5 text-xs text-slate-400">（主）</span>}
                       </td>
-                      <td className="py-1.5 px-3 text-right tabular-nums text-sm">{formatYenFull(p.allocatedSales)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums text-sm">{fmt(p.allocatedSales)}</td>
                       <td className={`py-1.5 px-3 text-right tabular-nums text-sm font-medium ${p.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {formatYenFull(p.profit)}
+                        {fmt(p.profit)}
                       </td>
                     </tr>
                   ))}
@@ -344,7 +347,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                       <tr key={a.addon_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 pr-3">{a.request_date}</td>
                         <td className="py-2 pr-3">{a.description}</td>
-                        <td className="py-2 text-right">{formatYenFull(a.amount)}</td>
+                        <td className="py-2 text-right">{fmt(a.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -391,7 +394,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                       <tr key={s.sales_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 pr-3">{s.billing_date}</td>
                         <td className="py-2 pr-3">{s.remarks}</td>
-                        <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
+                        <td className="py-2 pr-3 text-right">{fmt(s.amount)}</td>
                         <td className="py-2 text-center">
                           <Badge variant={s.deposit_status ? 'secondary' : 'destructive'}>
                             {s.deposit_status ? '入金済' : '未入金'}
@@ -578,6 +581,8 @@ function fmtAmountInput(raw: string): string {
 
 function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cost[]; partnerMap: Record<string, string>; partners: Partner[]; projectId: string }) {
   const router = useRouter()
+  const [masked] = useMasked()
+  const mfmt = (v: number) => masked ? '****' : fmtAmt(v)
   const [dialog, setDialog] = useState<{ vendor_id: string; month: string } | null>(null)
   const [editAmounts, setEditAmounts] = useState<Record<string, string>>({})
   const [editTaxTypes, setEditTaxTypes] = useState<Record<string, TaxType>>({})
@@ -863,9 +868,9 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
           <tbody>
             <tr className="font-bold bg-slate-100">
               <td className="py-2 pr-2 sticky left-0 bg-slate-100 w-[128px] min-w-[128px] border-b">合計</td>
-              <td className="py-2 px-3 text-right sticky left-[128px] bg-slate-100 border-r border-b">{fmtAmt(grandTotal)}</td>
+              <td className="py-2 px-3 text-right sticky left-[128px] bg-slate-100 border-r border-b">{mfmt(grandTotal)}</td>
               {months.map(m => (
-                <td key={m} className={`py-2 px-3 text-right whitespace-nowrap transition-colors border-b ${hoveredMonth === m ? 'bg-blue-50' : ''}`}>{fmtAmt(monthTotal(m))}</td>
+                <td key={m} className={`py-2 px-3 text-right whitespace-nowrap transition-colors border-b ${hoveredMonth === m ? 'bg-blue-50' : ''}`}>{mfmt(monthTotal(m))}</td>
               ))}
             </tr>
             {vendors.map((vid, idx) => {
@@ -883,7 +888,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                     className={`py-2 pr-2 whitespace-nowrap sticky left-0 transition-colors font-medium w-[128px] min-w-[128px] overflow-hidden text-ellipsis ${isLast ? '' : 'border-b'} ${isRowHovered ? 'bg-amber-50 text-amber-800' : 'bg-background text-foreground'}`}
                     title={name}
                   >{shortName}</td>
-                  <td className={`py-2 px-3 text-right font-medium whitespace-nowrap sticky left-[128px] transition-colors border-r ${isLast ? '' : 'border-b'} ${isRowHovered ? 'bg-amber-50' : 'bg-background'}`}>{fmtAmt(vendorTotals[vid] ?? 0)}</td>
+                  <td className={`py-2 px-3 text-right font-medium whitespace-nowrap sticky left-[128px] transition-colors border-r ${isLast ? '' : 'border-b'} ${isRowHovered ? 'bg-amber-50' : 'bg-background'}`}>{mfmt(vendorTotals[vid] ?? 0)}</td>
                   {months.map(m => {
                     const records = pivot[vid]?.[m] ?? []
                     const total = records.reduce((s, c) => s + c.amount, 0)
@@ -909,7 +914,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                           setNewTaxType('税抜')
                         }}
                       >
-                        {records.length > 0 ? fmtAmt(total) : <span className="text-muted-foreground/40">—</span>}
+                        {records.length > 0 ? mfmt(total) : <span className="text-muted-foreground/40">—</span>}
                       </td>
                     )
                   })}
@@ -1049,7 +1054,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
             ))}
             {dialogRecords.length > 0 && (
               <div className="text-right text-sm font-medium pt-1 border-t">
-                合計: {fmtAmt(dialogRecords.reduce((s, c) => s + c.amount, 0))}
+                合計: {mfmt(dialogRecords.reduce((s, c) => s + c.amount, 0))}
               </div>
             )}
             <div className="pt-2 border-t space-y-2">
