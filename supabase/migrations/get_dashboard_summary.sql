@@ -46,6 +46,7 @@ WITH
     SELECT p.project_id,
            p.manager_id,
            p.customer_id,
+           p.end_date,
            coalesce(u.username, p.manager_id) AS manager_name
     FROM   projects p
     LEFT   JOIN users u ON u.user_id = p.manager_id
@@ -61,10 +62,11 @@ WITH
            s.billing_date::date AS billing_date,
            count(sm.id) AS sub_count
     FROM   sales s
+    LEFT   JOIN project_info pi ON pi.project_id = s.project_id
     LEFT   JOIN project_sub_managers sm
            ON  sm.project_id = s.project_id
            AND sm.start_date <= s.billing_date::date
-           AND (sm.end_date IS NULL OR sm.end_date >= s.billing_date::date)
+           AND COALESCE(sm.end_date, pi.end_date, '9999-12-31') >= s.billing_date::date
            AND (sm.is_deleted IS NULL OR sm.is_deleted = false)
     WHERE  (s.is_deleted IS NULL OR s.is_deleted = false)
       AND  s.billing_date::date BETWEEN p_fy_start AND p_fy_end
@@ -111,10 +113,11 @@ WITH
            sum(sa.alloc_sales)  AS sales,
            sum(sa.alloc_profit) AS profit
     FROM   sale_allocation sa
+    JOIN   project_info pi ON pi.project_id = sa.project_id
     JOIN   project_sub_managers sm
            ON  sm.project_id = sa.project_id
            AND sm.start_date <= sa.billing_date
-           AND (sm.end_date IS NULL OR sm.end_date >= sa.billing_date)
+           AND COALESCE(sm.end_date, pi.end_date, '9999-12-31') >= sa.billing_date
            AND (sm.is_deleted IS NULL OR sm.is_deleted = false)
     GROUP  BY sm.manager_id
   ),

@@ -63,6 +63,8 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
     if (subManagerId === managerId) { toast.error('主担当者はサブ担当に追加できません'); return }
     if (subManagers.some(sm => sm.manager_id === subManagerId)) { toast.error('既にサブ担当として登録されています'); return }
     if (subEndDate && subEndDate < subStartDate) { toast.error('終了日は開始日以降の日付を入力してください'); return }
+    if (startDate && subStartDate < startDate) { toast.error(`開始日は工期開始日（${startDate}）以降にしてください`); return }
+    if (endDate && subEndDate && subEndDate > endDate) { toast.error(`終了日は工期終了日（${endDate}）以前にしてください`); return }
     startTransition(async () => {
       const res = await fetch(`/api/projects/${project.project_id}/sub-managers`, {
         method: 'POST',
@@ -123,9 +125,10 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
     const totals: Record<string, number> = {}
     for (const sale of sales) {
       const d = sale.billing_date
-      const activeSubs = subManagers.filter(sm =>
-        sm.start_date <= d && (sm.end_date === null || sm.end_date >= d)
-      )
+      const activeSubs = subManagers.filter(sm => {
+        const effectiveEnd = sm.end_date ?? project.end_date ?? '9999-12-31'
+        return sm.start_date <= d && effectiveEnd >= d
+      })
       const divisor = 1 + activeSubs.length
       const share = Math.round(sale.amount / divisor)
       totals[project.manager_id] = (totals[project.manager_id] ?? 0) + share
@@ -512,11 +515,11 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                       </div>
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground">開始日</p>
-                        <Input type="date" value={subStartDate} onChange={e => setSubStartDate(e.target.value)} className="h-8 text-xs" />
+                        <Input type="date" value={subStartDate} onChange={e => setSubStartDate(e.target.value)} className="h-8 text-xs" min={startDate || undefined} max={endDate || undefined} />
                       </div>
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">終了日（空欄=現在まで）</p>
-                        <Input type="date" value={subEndDate} onChange={e => setSubEndDate(e.target.value)} className="h-8 text-xs" />
+                        <p className="text-xs text-muted-foreground">終了日（空欄=工期終了日まで）</p>
+                        <Input type="date" value={subEndDate} onChange={e => setSubEndDate(e.target.value)} className="h-8 text-xs" min={subStartDate || undefined} max={endDate || undefined} />
                       </div>
                       <div className="flex items-end">
                         <Button size="sm" className="h-8 gap-1.5" onClick={addSubManager} disabled={isPending}>

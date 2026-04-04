@@ -314,6 +314,7 @@ function StaffSummaryTable({
   const fmt = (v: number) => masked ? '¥ ****' : formatYenFull(v)
 
   const managerMap = Object.fromEntries(projects.map(p => [p.project_id, p.manager_id]))
+  const projectEndDateMap = Object.fromEntries(projects.map(p => [p.project_id, p.end_date ?? '9999-12-31']))
   const userMap = Object.fromEntries(users.filter(u => u.username !== '管理者').map(u => [u.user_id, u.username]))
 
   // project_id → 副担当リスト（期間情報付き）
@@ -354,7 +355,10 @@ function StaffSummaryTable({
     const salesAlloc: Record<string, number> = {}
     for (const sale of salesByProject[row.project_id] ?? []) {
       const d = sale.billing_date ?? ''
-      const activeSubs = subs.filter(sm => sm.start_date <= d && (sm.end_date === null || sm.end_date >= d))
+      const activeSubs = subs.filter(sm => {
+        const effectiveEnd = sm.end_date ?? projectEndDateMap[row.project_id]
+        return sm.start_date <= d && effectiveEnd >= d
+      })
       const divisor = 1 + activeSubs.length
       salesAlloc[mainId] = (salesAlloc[mainId] ?? 0) + Math.round(sale.amount / divisor)
       for (const sm of activeSubs) {
@@ -367,7 +371,10 @@ function StaffSummaryTable({
     const costsAlloc: Record<string, number> = {}
     for (const cost of costsByProject[row.project_id] ?? []) {
       const d = cost.billing_month?.slice(0, 10) ?? ''
-      const activeSubs = subs.filter(sm => sm.start_date <= d && (sm.end_date === null || sm.end_date >= d))
+      const activeSubs = subs.filter(sm => {
+        const effectiveEnd = sm.end_date ?? projectEndDateMap[row.project_id]
+        return sm.start_date <= d && effectiveEnd >= d
+      })
       const divisor = 1 + activeSubs.length
       costsAlloc[mainId] = (costsAlloc[mainId] ?? 0) + Math.round(cost.amount / divisor)
       for (const sm of activeSubs) {
