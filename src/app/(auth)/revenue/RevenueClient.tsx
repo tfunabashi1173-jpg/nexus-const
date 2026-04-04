@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { RevenueSummary, MonthlyRevenue, Project, User } from '@/types'
+import { RevenueSummary, MonthlyRevenue, Project, User, ProjectSubManager } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYenFull } from '@/lib/utils/date'
 import { useMasked } from '@/lib/hooks/use-masked'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -22,6 +22,7 @@ interface Props {
   fiscalStartMonth: number
   projects: Project[]
   users: User[]
+  subManagers: ProjectSubManager[]
 }
 
 export function RevenueClient({
@@ -32,6 +33,7 @@ export function RevenueClient({
   fiscalStartMonth,
   projects,
   users,
+  subManagers,
 }: Props) {
   const today = new Date()
   const [masked] = useMasked()
@@ -264,6 +266,7 @@ export function RevenueClient({
                 annualData={summary.annual}
                 projects={projects}
                 users={users}
+                subManagers={subManagers}
                 masked={masked}
               />
             </CardContent>
@@ -276,32 +279,58 @@ export function RevenueClient({
 
 type AnnualRow = RevenueSummary['annual'][number]
 
+type AllocatedRow = AnnualRow & { isSubManager: boolean }
+
 function StaffSummaryTable({
   annualData,
   projects,
   users,
+  subManagers,
   masked,
 }: {
   annualData: AnnualRow[]
   projects: Project[]
   users: User[]
+  subManagers: ProjectSubManager[]
   masked: boolean
 }) {
   const fmt = (v: number) => masked ? '¥ ****' : formatYenFull(v)
-  // project_id → manager_id のマップ
+
   const managerMap = Object.fromEntries(projects.map(p => [p.project_id, p.manager_id]))
   const userMap = Object.fromEntries(users.filter(u => u.username !== '管理者').map(u => [u.user_id, u.username]))
 
-  // 担当者ごとに集計
-  const staffMap: Record<string, { name: string; rows: AnnualRow[]; sales: number; costs: number; profit: number }> = {}
+  // project_id → 副担当 manager_id[] のマップ
+  const subMap: Record<string, string[]> = {}
+  for (const sm of subManagers) {
+    if (!subMap[sm.project_id]) subMap[sm.project_id] = []
+    if (!subMap[sm.project_id].includes(sm.manager_id)) subMap[sm.project_id].push(sm.manager_id)
+  }
+
+  // 担当者ごとに集計（主担当＋副担当で等分按分）
+  const staffMap: Record<string, { name: string; rows: AllocatedRow[]; sales: number; costs: number; profit: number }> = {}
+
   for (const row of annualData) {
-    const managerId = managerMap[row.project_id] ?? 'unknown'
-    const name = userMap[managerId] ?? managerId
-    if (!staffMap[managerId]) staffMap[managerId] = { name, rows: [], sales: 0, costs: 0, profit: 0 }
-    staffMap[managerId].rows.push(row)
-    staffMap[managerId].sales += row.sales
-    staffMap[managerId].costs += row.costs
-    staffMap[managerId].profit += row.profit
+    const mainId = managerMap[row.project_id]
+    if (!mainId) continue
+    const subs = (subMap[row.project_id] ?? []).filter(id => id !== mainId)
+    const divisor = 1 + subs.length
+    const persons = [{ id: mainId, isSub: false }, ...subs.map(id => ({ id, isSub: true }))]
+
+    for (const { id: uid, isSub } of persons) {
+      const name = userMap[uid] ?? uid
+      if (!staffMap[uid]) staffMap[uid] = { name, rows: [], sales: 0, costs: 0, profit: 0 }
+      const allocatedRow: AllocatedRow = {
+        ...row,
+        sales:  Math.round(row.sales  / divisor),
+        costs:  Math.round(row.costs  / divisor),
+        profit: Math.round(row.profit / divisor),
+        isSubManager: isSub,
+      }
+      staffMap[uid].rows.push(allocatedRow)
+      staffMap[uid].sales  += allocatedRow.sales
+      staffMap[uid].costs  += allocatedRow.costs
+      staffMap[uid].profit += allocatedRow.profit
+    }
   }
   const staffList = Object.entries(staffMap).sort((a, b) => b[1].sales - a[1].sales)
 
@@ -352,8 +381,13 @@ function StaffSummaryTable({
                 </td>
               </tr>
               {expanded.has(managerId) && s.rows.map(r => (
-                <tr key={r.project_id} className="border-b bg-blue-50/40 text-xs">
-                  <td className="py-1.5 px-3 pl-8 text-muted-foreground">{r.site_name}</td>
+                <tr key={r.project_id + (r.isSubManager ? '-sub' : '')} className="border-b bg-blue-50/40 text-xs">
+                  <td className="py-1.5 px-3 pl-8 text-muted-foreground">
+                    {r.site_name}
+                    {r.isSubManager && (
+                      <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">副</span>
+                    )}
+                  </td>
                   <td className="py-1.5 px-3 text-right text-muted-foreground">—</td>
                   <td className="py-1.5 px-3 text-right">{fmt(r.sales)}</td>
                   <td className="py-1.5 px-3 text-right">{fmt(r.costs)}</td>

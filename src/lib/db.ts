@@ -300,6 +300,15 @@ export async function fetchCostsByProject(projectId: string): Promise<Cost[]> {
 // ==========================================
 // Project Sub Managers
 // ==========================================
+export async function fetchAllSubManagers(): Promise<ProjectSubManager[]> {
+  const { data } = await supabase()
+    .from('project_sub_managers')
+    .select('*, users(username)')
+    .or(ACTIVE)
+  if (!data) return []
+  return data.map((r: any) => ({ ...r, username: r.users?.username ?? r.manager_id }))
+}
+
 export async function fetchSubManagersByProject(projectId: string): Promise<ProjectSubManager[]> {
   const { data } = await supabase()
     .from('project_sub_managers')
