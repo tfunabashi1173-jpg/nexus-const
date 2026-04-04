@@ -104,7 +104,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
       {/* 稼働現場 — 即時表示 */}
       <Card className="bg-white shadow-sm border-0">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">🏗 稼働中現場</CardTitle>
+          <CardTitle className="text-base">稼働中現場</CardTitle>
         </CardHeader>
         <CardContent>
           {activeProjects.length === 0 ? (
