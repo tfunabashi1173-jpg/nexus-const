@@ -4,15 +4,13 @@ import { useState, useMemo, useTransition } from 'react'
 import { Project, Partner } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
 import { useMasked } from '@/lib/hooks/use-masked'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
-import { Search, CheckSquare } from 'lucide-react'
+import { Search, CheckSquare, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 interface Props {
   projects: Project[]
@@ -30,12 +28,39 @@ export function ProjectsClient({ projects, customers }: Props) {
   const today = new Date()
   const currentYM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const [masked] = useMasked()
 
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [monthFilter, setMonthFilter] = useState(currentYM)
+  // URLパラメータから初期値を取得（ブラウザバック時に復元される）
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? 'all')
+  const [monthFilter, setMonthFilter] = useState(searchParams.get('month') ?? currentYM)
+
+  // フィルター変更時にURLを更新（履歴を汚さず replace）
+  function updateMonth(value: string | null) {
+    if (!value) return
+    setMonthFilter(value)
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === currentYM) {
+      params.delete('month')
+    } else {
+      params.set('month', value)
+    }
+    router.replace(`/projects${params.size > 0 ? '?' + params.toString() : ''}`, { scroll: false })
+  }
+
+  function updateStatus(value: string | null) {
+    if (!value) return
+    setStatusFilter(value)
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === 'all') {
+      params.delete('status')
+    } else {
+      params.set('status', value)
+    }
+    router.replace(`/projects${params.size > 0 ? '?' + params.toString() : ''}`, { scroll: false })
+  }
 
   // 一括変更
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -131,7 +156,7 @@ export function ProjectsClient({ projects, customers }: Props) {
             className="pl-9"
           />
         </div>
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? "")}>
+        <Select value={statusFilter} onValueChange={updateStatus}>
           <SelectTrigger className="w-36"><SelectValue placeholder="ステータス" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">すべて</SelectItem>
@@ -141,17 +166,29 @@ export function ProjectsClient({ projects, customers }: Props) {
             <SelectItem value="入金済">入金済</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={monthFilter} onValueChange={(v) => setMonthFilter(v ?? currentYM)}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">すべての月</SelectItem>
-            {monthOptions.map(m => (
-              <SelectItem key={m} value={m}>
-                {m.replace('-', '年')}月{m === currentYM ? '（今月）' : ''}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1.5">
+          <Select value={monthFilter} onValueChange={updateMonth}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">すべての月</SelectItem>
+              {monthOptions.map(m => (
+                <SelectItem key={m} value={m}>
+                  {m.replace('-', '年')}月{m === currentYM ? '（今月）' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {monthFilter !== currentYM && monthFilter !== 'all' && (
+            <button
+              onClick={() => updateMonth(currentYM)}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors whitespace-nowrap border border-slate-200"
+              title="今月に戻る"
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+              今月
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 一括操作バー */}
