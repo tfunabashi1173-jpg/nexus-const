@@ -596,11 +596,14 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     }
   }, [])
 
-  // ダイアログ表示時に最初の金額欄へ自動フォーカス
+  // ダイアログ表示時に最初の金額欄へ自動フォーカス＆業者デフォルト税区分を反映
   const firstEditRef = useRef<HTMLInputElement>(null)
   const newAmountRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (!dialog) return
+    // 業者のデフォルト税区分を新規入力欄に反映
+    const vendor = partners.find(p => p.partner_id === dialog.vendor_id)
+    setNewTaxType((vendor?.default_tax_type ?? '税抜') as TaxType)
     const timer = setTimeout(() => {
       if (firstEditRef.current) {
         firstEditRef.current.focus()
@@ -728,7 +731,8 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     if (res.ok) {
       toast.success('登録しました')
       setNewAmount('')
-      setNewTaxType('税抜')
+      const vendor = partners.find(p => p.partner_id === dialog.vendor_id)
+      setNewTaxType((vendor?.default_tax_type ?? '税抜') as TaxType)
       setNewFile(null)
       setExtraMonths(prev => prev.filter(m => m !== dialog.month))
       setExtraVendors(prev => prev.filter(v => v !== dialog.vendor_id))
