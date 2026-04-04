@@ -764,9 +764,10 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
     setAddingMonth(false)
   }
 
-  function addVendorRow() {
-    if (!selectedVendorId) return
-    if (!vendors.includes(selectedVendorId)) setExtraVendors(prev => [...prev, selectedVendorId])
+  function addVendorRow(vendorId?: string) {
+    const id = vendorId ?? selectedVendorId
+    if (!id) return
+    if (!vendors.includes(id)) setExtraVendors(prev => [...prev, id])
     setAddingVendor(false)
     setSelectedVendorId('')
   }
@@ -799,7 +800,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
               <select
                 className="border rounded px-2 py-1 text-sm"
                 value={selectedVendorId}
-                onChange={e => setSelectedVendorId(e.target.value)}
+                onChange={e => { if (e.target.value) addVendorRow(e.target.value) }}
                 autoFocus
               >
                 <option value="">業者を選択</option>
@@ -815,7 +816,6 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                   )
                 })}
               </select>
-              <button onClick={addVendorRow} className="text-sm text-blue-600 font-medium hover:underline">追加</button>
               <button onClick={() => { setAddingVendor(false); setSelectedVendorId('') }} className="text-sm text-muted-foreground hover:text-foreground">キャンセル</button>
             </div>
           ) : (
@@ -931,7 +931,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
               <select
                 className="border rounded px-2 py-1 text-sm"
                 value={selectedVendorId}
-                onChange={e => setSelectedVendorId(e.target.value)}
+                onChange={e => { if (e.target.value) addVendorRow(e.target.value) }}
                 autoFocus
               >
                 <option value="">業者を選択</option>
@@ -947,7 +947,6 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
                   )
                 })}
               </select>
-              <button onClick={addVendorRow} className="text-sm text-blue-600 font-medium hover:underline">追加</button>
               <button onClick={() => { setAddingVendor(false); setSelectedVendorId('') }} className="text-sm text-muted-foreground hover:text-foreground">キャンセル</button>
             </>
           ) : (
