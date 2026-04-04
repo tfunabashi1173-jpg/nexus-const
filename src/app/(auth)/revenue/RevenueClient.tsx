@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { RevenueSummary, MonthlyRevenue, Project, User, ProjectSubManager } from '@/types'
+import { RevenueSummary, MonthlyRevenue, Project, User, ProjectSubManager, Sale, Cost } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYenFull } from '@/lib/utils/date'
 import { useMasked } from '@/lib/hooks/use-masked'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -23,6 +23,8 @@ interface Props {
   projects: Project[]
   users: User[]
   subManagers: ProjectSubManager[]
+  sales: Sale[]
+  costs: Cost[]
 }
 
 export function RevenueClient({
@@ -34,6 +36,8 @@ export function RevenueClient({
   projects,
   users,
   subManagers,
+  sales,
+  costs,
 }: Props) {
   const today = new Date()
   const [masked] = useMasked()
@@ -267,6 +271,8 @@ export function RevenueClient({
                 projects={projects}
                 users={users}
                 subManagers={subManagers}
+                sales={sales}
+                costs={costs}
                 masked={masked}
               />
             </CardContent>
@@ -286,12 +292,16 @@ function StaffSummaryTable({
   projects,
   users,
   subManagers,
+  sales,
+  costs,
   masked,
 }: {
   annualData: AnnualRow[]
   projects: Project[]
   users: User[]
   subManagers: ProjectSubManager[]
+  sales: Sale[]
+  costs: Cost[]
   masked: boolean
 }) {
   const fmt = (v: number) => masked ? '¥ ****' : formatYenFull(v)
@@ -299,37 +309,81 @@ function StaffSummaryTable({
   const managerMap = Object.fromEntries(projects.map(p => [p.project_id, p.manager_id]))
   const userMap = Object.fromEntries(users.filter(u => u.username !== '管理者').map(u => [u.user_id, u.username]))
 
-  // project_id → 副担当 manager_id[] のマップ
-  const subMap: Record<string, string[]> = {}
+  // project_id → 副担当リスト（期間情報付き）
+  const subMap: Record<string, ProjectSubManager[]> = {}
   for (const sm of subManagers) {
     if (!subMap[sm.project_id]) subMap[sm.project_id] = []
-    if (!subMap[sm.project_id].includes(sm.manager_id)) subMap[sm.project_id].push(sm.manager_id)
+    subMap[sm.project_id].push(sm)
   }
 
-  // 担当者ごとに集計（主担当＋副担当で等分按分）
+  // project_id → Sales[]・Costs[]
+  const salesByProject: Record<string, Sale[]> = {}
+  const costsByProject: Record<string, Cost[]> = {}
+  const projectIds = new Set(annualData.map(r => r.project_id))
+  for (const s of sales) {
+    if (!projectIds.has(s.project_id)) continue
+    if (!salesByProject[s.project_id]) salesByProject[s.project_id] = []
+    salesByProject[s.project_id].push(s)
+  }
+  for (const c of costs) {
+    if (!c.project_id || !projectIds.has(c.project_id)) continue
+    if (!costsByProject[c.project_id]) costsByProject[c.project_id] = []
+    costsByProject[c.project_id].push(c)
+  }
+
+  // 担当者ごとに集計
   const staffMap: Record<string, { name: string; rows: AllocatedRow[]; sales: number; costs: number; profit: number }> = {}
 
   for (const row of annualData) {
     const mainId = managerMap[row.project_id]
     if (!mainId) continue
-    const subs = (subMap[row.project_id] ?? []).filter(id => id !== mainId)
-    const divisor = 1 + subs.length
-    const persons = [{ id: mainId, isSub: false }, ...subs.map(id => ({ id, isSub: true }))]
+    const subs = subMap[row.project_id] ?? []
 
-    for (const { id: uid, isSub } of persons) {
-      const name = userMap[uid] ?? uid
-      if (!staffMap[uid]) staffMap[uid] = { name, rows: [], sales: 0, costs: 0, profit: 0 }
-      const allocatedRow: AllocatedRow = {
-        ...row,
-        sales:  Math.round(row.sales  / divisor),
-        costs:  Math.round(row.costs  / divisor),
-        profit: Math.round(row.profit / divisor),
-        isSubManager: isSub,
+    // 売上：billing_dateで副担当のアクティブ期間を判定して按分
+    const salesAlloc: Record<string, number> = {}
+    for (const sale of salesByProject[row.project_id] ?? []) {
+      const d = sale.billing_date ?? ''
+      const activeSubs = subs.filter(sm => sm.start_date <= d && (sm.end_date === null || sm.end_date >= d))
+      const divisor = 1 + activeSubs.length
+      salesAlloc[mainId] = (salesAlloc[mainId] ?? 0) + Math.round(sale.amount / divisor)
+      for (const sm of activeSubs) {
+        salesAlloc[sm.manager_id] = (salesAlloc[sm.manager_id] ?? 0) + Math.round(sale.amount / divisor)
       }
-      staffMap[uid].rows.push(allocatedRow)
-      staffMap[uid].sales  += allocatedRow.sales
-      staffMap[uid].costs  += allocatedRow.costs
-      staffMap[uid].profit += allocatedRow.profit
+    }
+    // 個別トランザクションがない場合は全額主担当
+    if (Object.keys(salesAlloc).length === 0) salesAlloc[mainId] = row.sales
+
+    // 原価：billing_monthで同様に按分
+    const costsAlloc: Record<string, number> = {}
+    for (const cost of costsByProject[row.project_id] ?? []) {
+      const d = cost.billing_month?.slice(0, 10) ?? ''
+      const activeSubs = subs.filter(sm => sm.start_date <= d && (sm.end_date === null || sm.end_date >= d))
+      const divisor = 1 + activeSubs.length
+      costsAlloc[mainId] = (costsAlloc[mainId] ?? 0) + Math.round(cost.amount / divisor)
+      for (const sm of activeSubs) {
+        costsAlloc[sm.manager_id] = (costsAlloc[sm.manager_id] ?? 0) + Math.round(cost.amount / divisor)
+      }
+    }
+    if (Object.keys(costsAlloc).length === 0) costsAlloc[mainId] = row.costs
+
+    // 関与した全員を集計
+    const allPersons = new Set([mainId, ...Object.keys(salesAlloc), ...Object.keys(costsAlloc)])
+    for (const uid of allPersons) {
+      const name = userMap[uid] ?? uid
+      const allocSales  = salesAlloc[uid]  ?? 0
+      const allocCosts  = costsAlloc[uid]  ?? 0
+      const allocProfit = allocSales - allocCosts
+      if (!staffMap[uid]) staffMap[uid] = { name, rows: [], sales: 0, costs: 0, profit: 0 }
+      staffMap[uid].rows.push({
+        ...row,
+        sales:  allocSales,
+        costs:  allocCosts,
+        profit: allocProfit,
+        isSubManager: uid !== mainId,
+      })
+      staffMap[uid].sales  += allocSales
+      staffMap[uid].costs  += allocCosts
+      staffMap[uid].profit += allocProfit
     }
   }
   const staffList = Object.entries(staffMap).sort((a, b) => b[1].sales - a[1].sales)
