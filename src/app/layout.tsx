@@ -5,6 +5,11 @@ import { Toaster } from '@/components/ui/sonner'
 export const metadata: Metadata = {
   title: 'NEXUS工事管理システム',
   description: '建設業向け工事管理・経営分析システム',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'NEXUS',
+  },
 }
 
 export default function RootLayout({
