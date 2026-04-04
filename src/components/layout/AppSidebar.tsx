@@ -90,14 +90,16 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   return (
     <>
-      {/* ハンバーガーボタン（モバイルのみ） */}
-      <button
-        className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-md bg-slate-900 text-white shadow-md"
-        onClick={() => setIsOpen(v => !v)}
-        aria-label="メニューを開く"
-      >
-        {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </button>
+      {/* ハンバーガーボタン（サイドバーが閉じている時のみ） */}
+      {!isOpen && (
+        <button
+          className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-md bg-slate-900 text-white shadow-md"
+          onClick={() => setIsOpen(true)}
+          aria-label="メニューを開く"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
 
       {/* オーバーレイ（モバイルのみ） */}
       {isOpen && (
@@ -113,9 +115,18 @@ export function AppSidebar({ user }: AppSidebarProps) {
       isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
     )}>
       {/* ヘッダー */}
-      <div className="px-5 py-5 border-b border-slate-700">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-0.5">NEXUS</p>
-        <h1 className="font-bold text-white text-sm leading-tight">工事管理システム</h1>
+      <div className="px-5 py-5 border-b border-slate-700 flex items-start justify-between">
+        <div>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-0.5">NEXUS</p>
+          <h1 className="font-bold text-white text-sm leading-tight">工事管理システム</h1>
+        </div>
+        <button
+          className="md:hidden p-1 text-slate-400 hover:text-white"
+          onClick={() => setIsOpen(false)}
+          aria-label="メニューを閉じる"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* 日付・ユーザー */}
