@@ -12,5 +12,6 @@ export async function POST() {
   // （DB一時障害後に空リストがキャッシュされた場合の手動回復手段として機能させる）
   revalidateTag('projects', {})
   revalidateTag('dashboard', {})
+  revalidateTag('revenue', {})
   return NextResponse.json(result)
 }
