@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, Fragment } from 'react'
 import { RevenueSummary, MonthlyRevenue, Project, User, ProjectSubManager, Sale, Cost } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYenFull } from '@/lib/utils/date'
 import { useMasked } from '@/lib/hooks/use-masked'
@@ -285,7 +285,8 @@ export function RevenueClient({
 
 type AnnualRow = RevenueSummary['annual'][number]
 
-type AllocatedRow = AnnualRow & { isSubManager: boolean }
+type SubAllocation = { uid: string; name: string; sales: number; costs: number; profit: number }
+type AllocatedRow = AnnualRow & { isSubManager: boolean; subAllocations: SubAllocation[] }
 
 function StaffSummaryTable({
   annualData,
@@ -350,7 +351,6 @@ function StaffSummaryTable({
         salesAlloc[sm.manager_id] = (salesAlloc[sm.manager_id] ?? 0) + Math.round(sale.amount / divisor)
       }
     }
-    // 個別トランザクションがない場合は全額主担当
     if (Object.keys(salesAlloc).length === 0) salesAlloc[mainId] = row.sales
 
     // 原価：billing_monthで同様に按分
@@ -366,24 +366,36 @@ function StaffSummaryTable({
     }
     if (Object.keys(costsAlloc).length === 0) costsAlloc[mainId] = row.costs
 
-    // 関与した全員を集計
-    const allPersons = new Set([mainId, ...Object.keys(salesAlloc), ...Object.keys(costsAlloc)])
-    for (const uid of allPersons) {
+    // 副担当の按分一覧（主担当の現場行に埋め込む用）
+    const allSubIds = new Set([
+      ...Object.keys(salesAlloc).filter(id => id !== mainId),
+      ...Object.keys(costsAlloc).filter(id => id !== mainId),
+    ])
+    const subAllocations: SubAllocation[] = Array.from(allSubIds).map(uid => {
+      const s = salesAlloc[uid] ?? 0
+      const c = costsAlloc[uid] ?? 0
+      return { uid, name: userMap[uid] ?? uid, sales: s, costs: c, profit: s - c }
+    })
+
+    // 主担当の行（副担当の按分情報付き）
+    const mainS = salesAlloc[mainId] ?? 0
+    const mainC = costsAlloc[mainId] ?? 0
+    if (!staffMap[mainId]) staffMap[mainId] = { name: userMap[mainId] ?? mainId, rows: [], sales: 0, costs: 0, profit: 0 }
+    staffMap[mainId].rows.push({ ...row, sales: mainS, costs: mainC, profit: mainS - mainC, isSubManager: false, subAllocations })
+    staffMap[mainId].sales  += mainS
+    staffMap[mainId].costs  += mainC
+    staffMap[mainId].profit += mainS - mainC
+
+    // 各副担当の行（自分のセクションに表示）
+    for (const uid of allSubIds) {
+      const allocS = salesAlloc[uid] ?? 0
+      const allocC = costsAlloc[uid] ?? 0
       const name = userMap[uid] ?? uid
-      const allocSales  = salesAlloc[uid]  ?? 0
-      const allocCosts  = costsAlloc[uid]  ?? 0
-      const allocProfit = allocSales - allocCosts
       if (!staffMap[uid]) staffMap[uid] = { name, rows: [], sales: 0, costs: 0, profit: 0 }
-      staffMap[uid].rows.push({
-        ...row,
-        sales:  allocSales,
-        costs:  allocCosts,
-        profit: allocProfit,
-        isSubManager: uid !== mainId,
-      })
-      staffMap[uid].sales  += allocSales
-      staffMap[uid].costs  += allocCosts
-      staffMap[uid].profit += allocProfit
+      staffMap[uid].rows.push({ ...row, sales: allocS, costs: allocC, profit: allocS - allocC, isSubManager: true, subAllocations: [] })
+      staffMap[uid].sales  += allocS
+      staffMap[uid].costs  += allocC
+      staffMap[uid].profit += allocS - allocC
     }
   }
   const staffList = Object.entries(staffMap).sort((a, b) => b[1].sales - a[1].sales)
@@ -435,21 +447,38 @@ function StaffSummaryTable({
                 </td>
               </tr>
               {expanded.has(managerId) && s.rows.map(r => (
-                <tr key={r.project_id + (r.isSubManager ? '-sub' : '')} className="border-b bg-blue-50/40 text-xs">
-                  <td className="py-1.5 px-3 pl-8 text-muted-foreground">
-                    {r.site_name}
-                    {r.isSubManager && (
-                      <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">副</span>
-                    )}
-                  </td>
-                  <td className="py-1.5 px-3 text-right text-muted-foreground">—</td>
-                  <td className="py-1.5 px-3 text-right">{fmt(r.sales)}</td>
-                  <td className="py-1.5 px-3 text-right">{fmt(r.costs)}</td>
-                  <td className={`py-1.5 px-3 text-right ${r.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(r.profit)}</td>
-                  <td className={`py-1.5 px-3 text-right ${r.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {r.sales > 0 ? `${((r.profit / r.sales) * 100).toFixed(1)}%` : '—'}
-                  </td>
-                </tr>
+                <Fragment key={r.project_id + (r.isSubManager ? '-sub' : '')}>
+                  <tr className="border-b bg-blue-50/40 text-xs">
+                    <td className="py-1.5 px-3 pl-8 text-muted-foreground">
+                      {r.site_name}
+                      {r.isSubManager && (
+                        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">副</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 px-3 text-right text-muted-foreground">—</td>
+                    <td className="py-1.5 px-3 text-right">{fmt(r.sales)}</td>
+                    <td className="py-1.5 px-3 text-right">{fmt(r.costs)}</td>
+                    <td className={`py-1.5 px-3 text-right ${r.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(r.profit)}</td>
+                    <td className={`py-1.5 px-3 text-right ${r.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {r.sales > 0 ? `${((r.profit / r.sales) * 100).toFixed(1)}%` : '—'}
+                    </td>
+                  </tr>
+                  {r.subAllocations.map(sub => (
+                    <tr key={r.project_id + '-sub-' + sub.uid} className="border-b bg-amber-50/50 text-xs">
+                      <td className="py-1 px-3 pl-12 text-amber-700">
+                        ↳ {sub.name}
+                        <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">副</span>
+                      </td>
+                      <td className="py-1 px-3 text-right text-muted-foreground">—</td>
+                      <td className="py-1 px-3 text-right text-amber-700">{fmt(sub.sales)}</td>
+                      <td className="py-1 px-3 text-right text-amber-700">{fmt(sub.costs)}</td>
+                      <td className={`py-1 px-3 text-right ${sub.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(sub.profit)}</td>
+                      <td className={`py-1 px-3 text-right ${sub.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {sub.sales > 0 ? `${((sub.profit / sub.sales) * 100).toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </>
           ))}
