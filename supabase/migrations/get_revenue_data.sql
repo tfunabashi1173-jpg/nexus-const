@@ -86,8 +86,8 @@ BEGIN
     WHERE (c.is_deleted IS NULL OR c.is_deleted = FALSE)
       AND c.billing_month::date BETWEEN p_fy_start AND p_fy_end
     GROUP BY c.vendor_id, p.name
+    HAVING SUM(c.amount) >= 1
     ORDER BY amount DESC
-    LIMIT 20
   )
   SELECT jsonb_build_object(
     'annual',         (SELECT COALESCE(jsonb_agg(row_to_json(annual_data)),    '[]'::jsonb) FROM annual_data),
