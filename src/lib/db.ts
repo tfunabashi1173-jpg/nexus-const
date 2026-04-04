@@ -389,7 +389,7 @@ export async function fetchAddonsByProject(projectId: string): Promise<Addon[]> 
   return data ?? []
 }
 
-export async function fetchAllAddons(): Promise<Addon[]> {
+async function fetchAllAddonsImpl(): Promise<Addon[]> {
   const end = perfStart('fetchAllAddons')
   const { data } = await supabase()
     .from('addons')
@@ -398,6 +398,11 @@ export async function fetchAllAddons(): Promise<Addon[]> {
   end()
   return data ?? []
 }
+
+export const fetchAllAddons = unstable_cache(fetchAllAddonsImpl, ['addons-all'], {
+  tags: ['projects'],
+  revalidate: 300,
+})
 
 export async function createAddon(addon: Omit<Addon, 'is_deleted' | 'deleted_at'>) {
   const { data, error } = await supabase().from('addons').insert(addon).select().single()

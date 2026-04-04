@@ -177,10 +177,11 @@ function KpiContent({
   const { alerts } = summary
 
   // 入金予定日超過の現場（入金済でないもの）
-  const now = new Date()
+  // new Date('YYYY-MM-DD') はUTC解釈でJSTと1日ズレるため文字列比較を使用
+  const todayStr = formatDateLocal(new Date())
   const overdueDeposit = projects.filter(p =>
     p.scheduled_deposit_date &&
-    new Date(p.scheduled_deposit_date) < now &&
+    p.scheduled_deposit_date < todayStr &&
     p.status !== '入金済'
   )
 

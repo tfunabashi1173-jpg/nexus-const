@@ -54,12 +54,15 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, ws, name)
   }
 
+  // ユーザーはパスワードハッシュを除外してエクスポート
+  const usersWithoutPassword = users.map(({ password: _pw, ...rest }: any) => rest)
+
   addSheet('工事台帳', projects)
   addSheet('取引先マスタ', partners)
   addSheet('原価明細', costs)
   addSheet('売上明細', sales)
   addSheet('追加工事履歴', addons)
-  addSheet('ユーザー', users)
+  addSheet('ユーザー', usersWithoutPassword)
 
   const buf: Buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
   const today = formatDateLocal(new Date())
