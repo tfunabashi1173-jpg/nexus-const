@@ -162,7 +162,7 @@ export function NewProjectClient({ customers, users, nextId }: Props) {
                     : <span className="text-muted-foreground">担当者を選択</span>}
                 </SelectTrigger>
                 <SelectContent>
-                  {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>)}
+                  {users.filter(u => u.username !== '管理者').map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>)}
                 </SelectContent>
               </Select>
               {errors.managerId && <p className="text-xs text-destructive">{errors.managerId}</p>}

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { getRevenueSummary, getMonthlyRevenue, getSystemSetting } from '@/lib/db'
+import { getRevenueSummary, getMonthlyRevenue, getSystemSetting, fetchProjects, fetchUsers } from '@/lib/db'
 import { getFiscalYear, getFiscalYearRange } from '@/lib/utils/date'
 import { RevenueClient } from './RevenueClient'
 
@@ -26,7 +26,11 @@ export default async function RevenuePage() {
     summary = await getRevenueSummary(fyStart, fyEnd)
   }
 
-  const monthlyData = await getMonthlyRevenue(currentMonth)
+  const [monthlyData, projects, users] = await Promise.all([
+    getMonthlyRevenue(currentMonth),
+    fetchProjects(),
+    fetchUsers(),
+  ])
 
   return (
     <RevenueClient
@@ -35,6 +39,8 @@ export default async function RevenuePage() {
       initialMonth={currentMonth}
       currentFY={currentFY}
       fiscalStartMonth={fiscalStartMonth}
+      projects={projects}
+      users={users}
     />
   )
 }

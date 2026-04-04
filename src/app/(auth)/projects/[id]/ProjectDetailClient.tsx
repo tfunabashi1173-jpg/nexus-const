@@ -459,7 +459,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                   <Label>担当者（主）</Label>
                   <Select value={managerId} onValueChange={(v) => setManagerId(v ?? "")}>
                     <SelectTrigger><SelectValue>{userMap[managerId] ?? managerId}</SelectValue></SelectTrigger>
-                    <SelectContent>{users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>)}</SelectContent>
+                    <SelectContent>{users.filter(u => u.username !== '管理者').map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
@@ -501,7 +501,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                             </span>
                           </SelectTrigger>
                           <SelectContent>
-                            {users.filter(u => u.user_id !== managerId && u.role !== 'admin').map(u => (
+                            {users.filter(u => u.user_id !== managerId && u.username !== '管理者').map(u => (
                               <SelectItem key={u.user_id} value={u.user_id}>{u.username}</SelectItem>
                             ))}
                           </SelectContent>

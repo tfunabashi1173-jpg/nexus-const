@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
@@ -593,7 +593,16 @@ export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRat
                       </span>
                     </SelectTrigger>
                     <SelectContent>
-                      {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
+                      {(['協力業者', '仕入先', '経費'] as const).map(cat => {
+                        const catVendors = vendors.filter(v => v.category === cat)
+                        if (catVendors.length === 0) return null
+                        return (
+                          <SelectGroup key={cat}>
+                            <SelectLabel>{cat}</SelectLabel>
+                            {catVendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
+                          </SelectGroup>
+                        )
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -756,7 +765,16 @@ export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRat
                           </span>
                         </SelectTrigger>
                         <SelectContent>
-                          {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
+                          {(['協力業者', '仕入先', '経費'] as const).map(cat => {
+                        const catVendors = vendors.filter(v => v.category === cat)
+                        if (catVendors.length === 0) return null
+                        return (
+                          <SelectGroup key={cat}>
+                            <SelectLabel>{cat}</SelectLabel>
+                            {catVendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
+                          </SelectGroup>
+                        )
+                      })}
                         </SelectContent>
                       </Select>
                     </div>
@@ -873,7 +891,16 @@ export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRat
                                         </span>
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
+                                        {(['協力業者', '仕入先', '経費'] as const).map(cat => {
+                        const catVendors = vendors.filter(v => v.category === cat)
+                        if (catVendors.length === 0) return null
+                        return (
+                          <SelectGroup key={cat}>
+                            <SelectLabel>{cat}</SelectLabel>
+                            {catVendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
+                          </SelectGroup>
+                        )
+                      })}
                                       </SelectContent>
                                     </Select>
                                   </div>
@@ -1047,7 +1074,16 @@ export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRat
                                         </span>
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {vendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
+                                        {(['協力業者', '仕入先', '経費'] as const).map(cat => {
+                        const catVendors = vendors.filter(v => v.category === cat)
+                        if (catVendors.length === 0) return null
+                        return (
+                          <SelectGroup key={cat}>
+                            <SelectLabel>{cat}</SelectLabel>
+                            {catVendors.map(v => <SelectItem key={v.partner_id} value={v.partner_id}>{normalizeCompanyName(v.name)}</SelectItem>)}
+                          </SelectGroup>
+                        )
+                      })}
                                       </SelectContent>
                                     </Select>
                                   </div>

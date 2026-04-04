@@ -1,14 +1,17 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useTransition } from 'react'
 import { Project, Partner } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
-import { Search } from 'lucide-react'
+import { Search, CheckSquare } from 'lucide-react'
+import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 interface Props {
   projects: Project[]
@@ -25,10 +28,54 @@ const STATUS_COLORS: Record<string, string> = {
 export function ProjectsClient({ projects, customers }: Props) {
   const today = new Date()
   const currentYM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [monthFilter, setMonthFilter] = useState(currentYM)
+
+  // 一括変更
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkStatus, setBulkStatus] = useState<string>('')
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  function toggleSelectAll() {
+    if (selected.size === filtered.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(filtered.map(p => p.project_id)))
+    }
+  }
+  function applyBulkStatus() {
+    if (!bulkStatus || selected.size === 0) return
+    startTransition(async () => {
+      const ids = [...selected]
+      const results = await Promise.all(ids.map(id =>
+        fetch(`/api/projects/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: bulkStatus }),
+        })
+      ))
+      const failed = results.filter(r => !r.ok).length
+      if (failed === 0) {
+        toast.success(`${ids.length}件のステータスを「${bulkStatus}」に変更しました`)
+        setSelected(new Set())
+        setBulkStatus('')
+        router.refresh()
+      } else {
+        toast.error(`${failed}件の変更に失敗しました`)
+        router.refresh()
+      }
+    })
+  }
 
   const customerMap = useMemo(
     () => Object.fromEntries(customers.map(c => [c.partner_id, c.name])),
@@ -105,11 +152,39 @@ export function ProjectsClient({ projects, customers }: Props) {
         </Select>
       </div>
 
+      {/* 一括操作バー */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm">
+          <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+          <span className="text-blue-700 font-medium">{selected.size}件選択中</span>
+          <Select value={bulkStatus} onValueChange={(v) => setBulkStatus(v ?? '')}>
+            <SelectTrigger className="h-8 w-36 text-sm"><SelectValue placeholder="変更後のステータス" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="受注">受注</SelectItem>
+              <SelectItem value="着工中">着工中</SelectItem>
+              <SelectItem value="完工">完工</SelectItem>
+              <SelectItem value="入金済">入金済</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" className="h-8" onClick={applyBulkStatus} disabled={!bulkStatus || isPending}>
+            {isPending ? '変更中...' : '一括変更'}
+          </Button>
+          <button type="button" className="ml-auto text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelected(new Set())}>
+            選択解除
+          </button>
+        </div>
+      )}
+
       {/* 一覧（デスクトップ: テーブル） */}
       <div className="hidden md:block overflow-auto rounded-lg shadow-sm border-0 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-800 text-white sticky top-0 z-10">
+              <th className="py-3 px-3 w-8">
+                <input type="checkbox" className="h-3.5 w-3.5 accent-white cursor-pointer"
+                  checked={filtered.length > 0 && selected.size === filtered.length}
+                  onChange={toggleSelectAll} />
+              </th>
               <th className="text-left py-3 px-3 font-medium">工事ID</th>
               <th className="text-left py-3 px-3 font-medium">現場名</th>
               <th className="text-left py-3 px-3 font-medium">ステータス</th>
@@ -121,7 +196,12 @@ export function ProjectsClient({ projects, customers }: Props) {
           </thead>
           <tbody>
             {filtered.map((p, i) => (
-              <tr key={p.project_id} className={`border-b last:border-0 hover:bg-blue-50 transition-colors ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+              <tr key={p.project_id} className={`border-b last:border-0 hover:bg-blue-50 transition-colors ${selected.has(p.project_id) ? 'bg-blue-50' : i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                <td className="py-2 px-3">
+                  <input type="checkbox" className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                    checked={selected.has(p.project_id)}
+                    onChange={() => toggleSelect(p.project_id)} />
+                </td>
                 <td className="py-2 px-3">
                   <Link href={`/projects/${p.project_id}`} className="text-primary hover:underline font-mono text-xs">
                     {p.project_id}
@@ -147,7 +227,7 @@ export function ProjectsClient({ projects, customers }: Props) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                <td colSpan={8} className="py-8 text-center text-muted-foreground">
                   該当する現場はありません
                 </td>
               </tr>

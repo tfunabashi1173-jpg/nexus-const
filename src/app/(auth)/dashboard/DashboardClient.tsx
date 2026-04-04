@@ -115,6 +115,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
           summaryPromise={summaryPromise}
           overrideSummary={overrideSummary}
           masked={masked}
+          projects={projects}
         />
       </Suspense>
 
@@ -178,10 +179,12 @@ function KpiContent({
   summaryPromise,
   overrideSummary,
   masked,
+  projects,
 }: {
   summaryPromise: Promise<DashboardSummary>
   overrideSummary: DashboardSummary | null
   masked: boolean
+  projects: Project[]
 }) {
   const initialSummary = use(summaryPromise)
   const summary = overrideSummary ?? initialSummary
@@ -190,7 +193,16 @@ function KpiContent({
   const totalCosts  = summary.kpi.total_costs
   const totalProfit = totalSales - totalCosts
   const { alerts } = summary
-  const hasAlerts = alerts.unpaid_sales > 0 || alerts.orphaned_costs > 0 || alerts.unbilled_costs > 0
+
+  // 入金予定日超過の現場（入金済でないもの）
+  const now = new Date()
+  const overdueDeposit = projects.filter(p =>
+    p.scheduled_deposit_date &&
+    new Date(p.scheduled_deposit_date) < now &&
+    p.status !== '入金済'
+  )
+
+  const hasAlerts = alerts.unpaid_sales > 0 || alerts.orphaned_costs > 0 || alerts.unbilled_costs > 0 || overdueDeposit.length > 0
 
   const fmt = (v: number) => masked ? '¥ ****' : formatYen(v)
 
@@ -214,6 +226,11 @@ function KpiContent({
               {alerts.unbilled_costs > 0 && (
                 <Link href="/projects" className="underline underline-offset-2 hover:opacity-80">
                   📋 未請求現場: <strong>{alerts.unbilled_costs}件</strong> →工事一覧
+                </Link>
+              )}
+              {overdueDeposit.length > 0 && (
+                <Link href="/projects?status=完工" className="underline underline-offset-2 hover:opacity-80">
+                  🗓️ 入金予定日超過: <strong>{overdueDeposit.length}件</strong>（{overdueDeposit.slice(0, 2).map(p => p.site_name).join('、')}{overdueDeposit.length > 2 ? '…' : ''}）
                 </Link>
               )}
             </div>
