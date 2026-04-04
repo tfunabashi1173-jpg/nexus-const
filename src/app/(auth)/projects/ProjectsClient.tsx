@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
+import { useState, useMemo, useTransition, useEffect } from 'react'
 import { Project, Partner } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
 import { useMasked } from '@/lib/hooks/use-masked'
@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import Link from 'next/link'
 import { Search, CheckSquare, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+
+const SESSION_KEY = 'nexus_projects_filter'
 
 interface Props {
   projects: Project[]
@@ -28,38 +30,41 @@ export function ProjectsClient({ projects, customers }: Props) {
   const today = new Date()
   const currentYM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const [masked] = useMasked()
 
   const [search, setSearch] = useState('')
-  // URLパラメータから初期値を取得（ブラウザバック時に復元される）
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? 'all')
-  const [monthFilter, setMonthFilter] = useState(searchParams.get('month') ?? currentYM)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [monthFilter, setMonthFilter] = useState(currentYM)
 
-  // フィルター変更時にURLを更新（履歴を汚さず replace）
+  // sessionStorageから前回のフィルター状態を復元
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY)
+      if (saved) {
+        const { status, month } = JSON.parse(saved)
+        if (status) setStatusFilter(status)
+        if (month) setMonthFilter(month)
+      }
+    } catch {}
+  }, [])
+
   function updateMonth(value: string | null) {
     if (!value) return
     setMonthFilter(value)
-    const params = new URLSearchParams(searchParams.toString())
-    if (value === currentYM) {
-      params.delete('month')
-    } else {
-      params.set('month', value)
-    }
-    router.replace(`/projects${params.size > 0 ? '?' + params.toString() : ''}`, { scroll: false })
+    saveFilter(statusFilter, value)
   }
 
   function updateStatus(value: string | null) {
     if (!value) return
     setStatusFilter(value)
-    const params = new URLSearchParams(searchParams.toString())
-    if (value === 'all') {
-      params.delete('status')
-    } else {
-      params.set('status', value)
-    }
-    router.replace(`/projects${params.size > 0 ? '?' + params.toString() : ''}`, { scroll: false })
+    saveFilter(value, monthFilter)
+  }
+
+  function saveFilter(status: string, month: string) {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ status, month }))
+    } catch {}
   }
 
   // 一括変更

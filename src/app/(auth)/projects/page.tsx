@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { Suspense } from 'react'
 import { fetchProjects, fetchPartners } from '@/lib/db'
 import { ProjectsClient } from './ProjectsClient'
 
@@ -11,9 +10,5 @@ export const metadata: Metadata = {
 export default async function ProjectsPage() {
   const [projects, partners] = await Promise.all([fetchProjects(), fetchPartners()])
   const customers = partners.filter(p => p.category === '得意先')
-  return (
-    <Suspense fallback={null}>
-      <ProjectsClient projects={projects} customers={customers} />
-    </Suspense>
-  )
+  return <ProjectsClient projects={projects} customers={customers} />
 }
