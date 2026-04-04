@@ -18,11 +18,18 @@ export default async function CostsPage() {
 
   const VENDOR_CATEGORY_ORDER = ['協力業者', '仕入先', '経費']
   const vendors = partners
+    .filter(p => VENDOR_CATEGORY_ORDER.includes(p.category) && !p.is_hidden)
+    .sort((a, b) => {
+      const ci = VENDOR_CATEGORY_ORDER.indexOf(a.category) - VENDOR_CATEGORY_ORDER.indexOf(b.category)
+      return ci !== 0 ? ci : normalizeCompanyName(a.name).localeCompare(normalizeCompanyName(b.name), 'ja')
+    })
+  // 非表示業者も名前解決のために渡す（既存原価の表示で(不明)にならないよう）
+  const allVendors = partners
     .filter(p => VENDOR_CATEGORY_ORDER.includes(p.category))
     .sort((a, b) => {
       const ci = VENDOR_CATEGORY_ORDER.indexOf(a.category) - VENDOR_CATEGORY_ORDER.indexOf(b.category)
       return ci !== 0 ? ci : normalizeCompanyName(a.name).localeCompare(normalizeCompanyName(b.name), 'ja')
     })
 
-  return <CostsClient costs={costs} vendors={vendors} projects={projects} safetyFeeRate={parseFloat(safetyFeeRateStr) || 0} />
+  return <CostsClient costs={costs} vendors={vendors} allVendors={allVendors} projects={projects} safetyFeeRate={parseFloat(safetyFeeRateStr) || 0} />
 }

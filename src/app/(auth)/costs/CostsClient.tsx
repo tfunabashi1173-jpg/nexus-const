@@ -20,7 +20,8 @@ import { InvoiceDetail } from '@/types'
 
 interface Props {
   costs: Cost[]
-  vendors: Partner[]
+  vendors: Partner[]       // ドロップダウン用（非表示除外済み）
+  allVendors: Partner[]    // 名前解決用（非表示含む）
   projects: Project[]
   safetyFeeRate: number  // % (例: 1.0 = 1%)
 }
@@ -66,11 +67,12 @@ function TaxTypeSelect({ value, onChange, className }: { value: TaxType; onChang
   )
 }
 
-export function CostsClient({ costs, vendors, projects, safetyFeeRate }: Props) {
+export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRate }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const vendorMap = Object.fromEntries(vendors.map(v => [v.partner_id, v.name]))
+  // 非表示業者も含めて名前解決（既存原価が(不明)にならないよう）
+  const vendorMap = Object.fromEntries(allVendors.map(v => [v.partner_id, v.name]))
 
   const today = new Date()
   const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`

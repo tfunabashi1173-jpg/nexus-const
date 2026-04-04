@@ -11,16 +11,45 @@ const ACTIVE = 'is_deleted.is.null,is_deleted.eq.false'
 const invalidate = (tag: string) => revalidateTag(tag, {})
 
 // ==========================================
+// System Log（ユーザーセッション不要）
+// ==========================================
+export async function insertSystemLog(
+  level: 'error' | 'warn',
+  source: string,
+  message: string,
+  detail: Record<string, any> = {}
+): Promise<void> {
+  try {
+    await supabase().from('app_audit_log').insert({
+      ts: new Date().toISOString(),
+      user_id: null,
+      user_name: 'system',
+      role: level,
+      action: 'system_error',
+      target_table: source,
+      target_key: null,
+      detail: { message, ...detail },
+    })
+  } catch {
+    // ログ失敗はサイレントに無視
+  }
+}
+
+// ==========================================
 // Projects
 // ==========================================
 async function fetchProjectsImpl(): Promise<Project[]> {
   const end = perfStart('fetchProjects')
-  const { data } = await supabase()
+  const { data, error } = await supabase()
     .from('projects')
     .select('*, users(username)')
     .or(ACTIVE)
     .order('start_date', { ascending: false })
   end()
+  if (error) {
+    console.error('[fetchProjects] Supabase error:', error.message)
+    await insertSystemLog('error', 'projects', error.message, { code: error.code })
+  }
   if (!data) return []
   return data.map((p: any) => ({
     ...p,
@@ -109,12 +138,16 @@ export async function getNextProjectId(): Promise<string> {
 // ==========================================
 async function fetchPartnersImpl(): Promise<Partner[]> {
   const end = perfStart('fetchPartners')
-  const { data } = await supabase()
+  const { data, error } = await supabase()
     .from('partners')
     .select('*')
     .or(ACTIVE)
     .order('name')
   end()
+  if (error) {
+    console.error('[fetchPartners] Supabase error:', error.message)
+    await insertSystemLog('error', 'partners', error.message, { code: error.code })
+  }
   return data ?? []
 }
 
@@ -154,12 +187,16 @@ export async function softDeletePartner(id: string) {
 // ==========================================
 async function fetchSalesImpl(): Promise<Sale[]> {
   const end = perfStart('fetchSales')
-  const { data } = await supabase()
+  const { data, error } = await supabase()
     .from('sales')
     .select('*')
     .or(ACTIVE)
     .order('billing_date', { ascending: false })
   end()
+  if (error) {
+    console.error('[fetchSales] Supabase error:', error.message)
+    await insertSystemLog('error', 'sales', error.message, { code: error.code })
+  }
   return data ?? []
 }
 
@@ -225,13 +262,17 @@ async function fetchCostsImpl(): Promise<Cost[]> {
   const cutoff = new Date()
   cutoff.setMonth(cutoff.getMonth() - 36)
   const cutoffStr = formatDateLocal(new Date(cutoff.getFullYear(), cutoff.getMonth(), 1))
-  const { data } = await supabase()
+  const { data, error } = await supabase()
     .from('costs')
     .select('*')
     .or(ACTIVE)
     .gte('billing_month', cutoffStr)
     .order('billing_month', { ascending: false })
   end()
+  if (error) {
+    console.error('[fetchCosts] Supabase error:', error.message)
+    await insertSystemLog('error', 'costs', error.message, { code: error.code })
+  }
   return data ?? []
 }
 

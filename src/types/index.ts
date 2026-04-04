@@ -29,6 +29,7 @@ export interface Partner {
   closing_day: number | null
   payment_cycle: number | null
   payment_day: number | null
+  is_hidden: boolean
   is_deleted: boolean | null
   deleted_at: string | null
 }

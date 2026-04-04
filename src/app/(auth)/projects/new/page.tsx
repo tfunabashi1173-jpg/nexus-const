@@ -14,7 +14,7 @@ export default async function NewProjectPage() {
     getNextProjectId(),
   ])
 
-  const customers = partners.filter(p => p.category === '得意先')
+  const customers = partners.filter(p => p.category === '得意先' && !p.is_hidden)
 
   return <NewProjectClient customers={customers} users={users} nextId={nextId} />
 }

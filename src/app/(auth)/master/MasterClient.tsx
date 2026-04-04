@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef } from 'react'
-import { User, Partner } from '@/types'
+import { User, Partner, AuditLog } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,7 @@ import { formatDateLocal } from '@/lib/utils/date'
 interface Props {
   users: User[]
   partners: Partner[]
+  logs: AuditLog[]
   fiscalStartMonth: string
   safetyFeeRate: string
   geminiModel: string
@@ -24,7 +25,7 @@ interface Props {
 
 const PARTNER_CATEGORIES = ['得意先', '協力業者', '仕入先', '経費'] as const
 
-export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate, geminiModel }: Props) {
+export function MasterClient({ users, partners, logs, fiscalStartMonth, safetyFeeRate, geminiModel }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -374,6 +375,22 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
     })
   }
 
+  function togglePartnerHidden(id: string, currentHidden: boolean) {
+    startTransition(async () => {
+      const res = await fetch(`/api/master/partners/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_hidden: !currentHidden }),
+      })
+      if (res.ok) {
+        toast.success(!currentHidden ? 'リストから非表示にしました' : 'リストに表示しました')
+        router.refresh()
+      } else {
+        toast.error('更新に失敗しました')
+      }
+    })
+  }
+
   function saveSettings() {
     startTransition(async () => {
       const res = await fetch('/api/master/settings', {
@@ -475,6 +492,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
           <TabsTrigger value="settings">🔧 システム設定</TabsTrigger>
           <TabsTrigger value="evidence">🗂️ 証憑管理</TabsTrigger>
           <TabsTrigger value="backup">💾 バックアップ</TabsTrigger>
+          <TabsTrigger value="logs">🔍 システムログ</TabsTrigger>
         </TabsList>
 
         {/* ユーザー管理 */}
@@ -697,7 +715,7 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                     </thead>
                     <tbody>
                       {partnersByCategory(cat).map((p, i) => (
-                        <tr key={p.partner_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                        <tr key={p.partner_id} className={`border-b last:border-0 ${p.is_hidden ? 'bg-slate-100 opacity-70' : i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                           {bulkEditCat === cat ? (
                             /* 全編集モード行 */
                             <>
@@ -807,7 +825,12 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                             </>
                           ) : (
                             <>
-                              <td className="py-2 px-3">{p.name}</td>
+                              <td className="py-2 px-3">
+                                <span className={p.is_hidden ? 'text-muted-foreground' : ''}>{p.name}</span>
+                                {p.is_hidden && (
+                                  <Badge variant="outline" className="ml-2 text-[10px] text-slate-400 border-slate-300">リスト非表示</Badge>
+                                )}
+                              </td>
                               {cat === '得意先' && <>
                                 <td className="py-2 px-3 text-center">{p.closing_day === 99 ? '末日' : p.closing_day}</td>
                                 <td className="py-2 px-3 text-center">{p.payment_cycle}ヶ月後</td>
@@ -826,6 +849,14 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
                                 </td>
                               )}
                               <td className="py-2 px-3 text-right whitespace-nowrap">
+                                <Button
+                                  variant="ghost" size="icon" className={`h-7 w-7 ${p.is_hidden ? 'text-slate-400' : 'text-slate-500'}`}
+                                  onClick={() => togglePartnerHidden(p.partner_id, p.is_hidden)}
+                                  disabled={isPending}
+                                  title={p.is_hidden ? 'リストに表示する' : 'リストから非表示にする'}
+                                >
+                                  {p.is_hidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                </Button>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500" onClick={() => startEditPartner(p)} disabled={isPending}>
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
@@ -1124,7 +1155,104 @@ export function MasterClient({ users, partners, fiscalStartMonth, safetyFeeRate,
           </Card>
         </TabsContent>
 
+        {/* システムログ */}
+        <TabsContent value="logs">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">システムログ</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <SystemLogsPanel logs={logs} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
     </div>
+  )
+}
+
+function SystemLogsPanel({ logs }: { logs: AuditLog[] }) {
+  const [filter, setFilter] = useState<'all' | 'error' | 'ops'>('all')
+  const [search, setSearch] = useState('')
+
+  const filtered = logs.filter(l => {
+    if (filter === 'error' && l.action !== 'system_error') return false
+    if (filter === 'ops' && l.action === 'system_error') return false
+    if (search) {
+      const q = search.toLowerCase()
+      return (
+        (l.target_table ?? '').toLowerCase().includes(q) ||
+        (l.action ?? '').toLowerCase().includes(q) ||
+        (l.user_name ?? '').toLowerCase().includes(q) ||
+        JSON.stringify(l.detail ?? {}).toLowerCase().includes(q)
+      )
+    }
+    return true
+  })
+
+  return (
+    <>
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1">
+          {(['all', 'error', 'ops'] as const).map(f => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`text-xs px-2 py-1 rounded border transition-colors ${filter === f ? 'bg-slate-800 text-white border-slate-800' : 'border-input bg-background hover:bg-slate-50'}`}
+            >
+              {f === 'all' ? '全て' : f === 'error' ? 'エラー' : '操作履歴'}
+            </button>
+          ))}
+        </div>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="テーブル・操作・詳細で検索"
+          className="h-8 px-3 text-xs border rounded flex-1 min-w-[160px] bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <span className="text-xs text-muted-foreground">{filtered.length}件</span>
+      </div>
+
+      <div className="overflow-auto max-h-[500px] border rounded">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-slate-800 text-white">
+              <th className="text-left py-2 px-2 font-medium w-36">日時(JST)</th>
+              <th className="text-left py-2 px-2 font-medium w-20">種別</th>
+              <th className="text-left py-2 px-2 font-medium w-24">ユーザー</th>
+              <th className="text-left py-2 px-2 font-medium w-20">テーブル</th>
+              <th className="text-left py-2 px-2 font-medium">詳細</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((l, i) => {
+              const isError = l.action === 'system_error'
+              const tsJst = l.ts_jst ?? (l.ts ? new Date(l.ts).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—')
+              const detailStr = l.detail && Object.keys(l.detail).length > 0
+                ? JSON.stringify(l.detail)
+                : l.target_key ?? '—'
+              return (
+                <tr key={l.id} className={`border-b last:border-0 ${isError ? 'bg-red-50' : i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                  <td className="py-1.5 px-2 whitespace-nowrap font-mono text-[11px]">{tsJst}</td>
+                  <td className="py-1.5 px-2">
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${isError ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {isError ? `${l.role ?? 'error'}` : l.action}
+                    </span>
+                  </td>
+                  <td className="py-1.5 px-2 text-muted-foreground">{l.user_name ?? '—'}</td>
+                  <td className="py-1.5 px-2 text-muted-foreground">{l.target_table ?? '—'}</td>
+                  <td className="py-1.5 px-2 truncate max-w-xs text-muted-foreground" title={detailStr}>{detailStr}</td>
+                </tr>
+              )
+            })}
+            {filtered.length === 0 && (
+              <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">ログなし</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }

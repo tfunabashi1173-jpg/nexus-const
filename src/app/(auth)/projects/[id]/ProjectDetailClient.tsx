@@ -106,7 +106,7 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
 
   const partnerMap = Object.fromEntries(partners.map(p => [p.partner_id, p.name]))
   const userMap = Object.fromEntries(users.map(u => [u.user_id, u.username]))
-  const customers = partners.filter(p => p.category === '得意先')
+  const customers = partners.filter(p => p.category === '得意先' && !p.is_hidden)
 
   const addonSum = addons.reduce((s, a) => s + a.amount, 0)
   const totalContract = (project.contract_amount ?? 0) + addonSum
@@ -649,7 +649,7 @@ function CostPivotTable({ costs, partnerMap, partners, projectId }: { costs: Cos
 
   const VENDOR_CATEGORY_ORDER: Record<string, number> = { '協力業者': 0, '仕入先': 1, '経費': 2 }
   const vendorOptions = partners
-    .filter(p => p.category !== '得意先' && !vendors.includes(p.partner_id))
+    .filter(p => p.category !== '得意先' && !p.is_hidden && !vendors.includes(p.partner_id))
     .sort((a, b) => {
       const catDiff = (VENDOR_CATEGORY_ORDER[a.category] ?? 99) - (VENDOR_CATEGORY_ORDER[b.category] ?? 99)
       if (catDiff !== 0) return catDiff
