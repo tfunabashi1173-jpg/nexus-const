@@ -274,6 +274,8 @@ export function RevenueClient({
                 sales={sales}
                 costs={costs}
                 masked={masked}
+                fyStart={formatDateLocal(getFiscalYearRange(selectedFY, fiscalStartMonth).start)}
+                fyEnd={formatDateLocal(getFiscalYearRange(selectedFY, fiscalStartMonth).end)}
               />
             </CardContent>
           </Card>
@@ -296,6 +298,8 @@ function StaffSummaryTable({
   sales,
   costs,
   masked,
+  fyStart,
+  fyEnd,
 }: {
   annualData: AnnualRow[]
   projects: Project[]
@@ -304,6 +308,8 @@ function StaffSummaryTable({
   sales: Sale[]
   costs: Cost[]
   masked: boolean
+  fyStart: string
+  fyEnd: string
 }) {
   const fmt = (v: number) => masked ? '¥ ****' : formatYenFull(v)
 
@@ -317,17 +323,21 @@ function StaffSummaryTable({
     subMap[sm.project_id].push(sm)
   }
 
-  // project_id → Sales[]・Costs[]
+  // project_id → Sales[]・Costs[]（選択年度内のみ）
   const salesByProject: Record<string, Sale[]> = {}
   const costsByProject: Record<string, Cost[]> = {}
   const projectIds = new Set(annualData.map(r => r.project_id))
   for (const s of sales) {
     if (!projectIds.has(s.project_id)) continue
+    const d = s.billing_date ?? ''
+    if (d && (d < fyStart || d > fyEnd)) continue
     if (!salesByProject[s.project_id]) salesByProject[s.project_id] = []
     salesByProject[s.project_id].push(s)
   }
   for (const c of costs) {
     if (!c.project_id || !projectIds.has(c.project_id)) continue
+    const d = c.billing_month?.slice(0, 10) ?? ''
+    if (d && (d < fyStart || d > fyEnd)) continue
     if (!costsByProject[c.project_id]) costsByProject[c.project_id] = []
     costsByProject[c.project_id].push(c)
   }
@@ -381,7 +391,9 @@ function StaffSummaryTable({
     const mainS = salesAlloc[mainId] ?? 0
     const mainC = costsAlloc[mainId] ?? 0
     if (!staffMap[mainId]) staffMap[mainId] = { name: userMap[mainId] ?? mainId, rows: [], sales: 0, costs: 0, profit: 0 }
-    staffMap[mainId].rows.push({ ...row, sales: mainS, costs: mainC, profit: mainS - mainC, isSubManager: false, subAllocations, actualSales: row.sales, actualCosts: row.costs })
+    const actualSales = (salesByProject[row.project_id] ?? []).reduce((s, t) => s + t.amount, 0) || row.sales
+    const actualCosts = (costsByProject[row.project_id] ?? []).reduce((s, t) => s + t.amount, 0) || row.costs
+    staffMap[mainId].rows.push({ ...row, sales: mainS, costs: mainC, profit: mainS - mainC, isSubManager: false, subAllocations, actualSales, actualCosts })
     staffMap[mainId].sales  += mainS
     staffMap[mainId].costs  += mainC
     staffMap[mainId].profit += mainS - mainC
@@ -392,7 +404,7 @@ function StaffSummaryTable({
       const allocC = costsAlloc[uid] ?? 0
       const name = userMap[uid] ?? uid
       if (!staffMap[uid]) staffMap[uid] = { name, rows: [], sales: 0, costs: 0, profit: 0 }
-      staffMap[uid].rows.push({ ...row, sales: allocS, costs: allocC, profit: allocS - allocC, isSubManager: true, subAllocations: [], actualSales: row.sales, actualCosts: row.costs })
+      staffMap[uid].rows.push({ ...row, sales: allocS, costs: allocC, profit: allocS - allocC, isSubManager: true, subAllocations: [], actualSales: 0, actualCosts: 0 })
       staffMap[uid].sales  += allocS
       staffMap[uid].costs  += allocC
       staffMap[uid].profit += allocS - allocC
