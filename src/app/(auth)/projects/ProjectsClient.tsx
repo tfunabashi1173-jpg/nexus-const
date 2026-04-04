@@ -3,6 +3,7 @@
 import { useState, useMemo, useTransition } from 'react'
 import { Project, Partner } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
+import { useMasked } from '@/lib/hooks/use-masked'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,7 @@ export function ProjectsClient({ projects, customers }: Props) {
   const currentYM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [masked] = useMasked()
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -222,7 +224,7 @@ export function ProjectsClient({ projects, customers }: Props) {
                 <td className="py-2 px-3 text-muted-foreground whitespace-nowrap text-xs">
                   {p.start_date?.slice(0, 7)} 〜 {p.end_date?.slice(0, 7)}
                 </td>
-                <td className="py-2 px-3 text-right">{formatYenFull(p.contract_amount)}</td>
+                <td className="py-2 px-3 text-right">{masked ? '¥ ****' : formatYenFull(p.contract_amount)}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
@@ -255,7 +257,7 @@ export function ProjectsClient({ projects, customers }: Props) {
                   <p>{customerMap[p.customer_id] ?? '(不明)'} / {p.manager_name}</p>
                   <p>{p.start_date?.slice(0, 7)} 〜 {p.end_date?.slice(0, 7)}</p>
                 </div>
-                <p className="text-sm font-semibold tabular-nums">{formatYenFull(p.contract_amount)}</p>
+                <p className="text-sm font-semibold tabular-nums">{masked ? '¥ ****' : formatYenFull(p.contract_amount)}</p>
               </div>
             </Link>
           ))

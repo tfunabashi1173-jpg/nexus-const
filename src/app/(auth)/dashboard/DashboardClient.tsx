@@ -23,8 +23,9 @@ import {
   ResponsiveContainer,
   LabelList,
 } from 'recharts'
-import { AlertTriangle, EyeOff, Eye } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
+import { useMasked } from '@/lib/hooks/use-masked'
 
 interface Props {
   projects: Project[]
@@ -40,18 +41,7 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
   const [selectedFY, setSelectedFY] = useState(currentFY)
   const [overrideSummary, setOverrideSummary] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(false)
-  const [masked, setMasked] = useState(false)
-  useEffect(() => {
-    setMasked(localStorage.getItem('dashboard_masked') === '1')
-  }, [])
-
-  function toggleMasked() {
-    setMasked(v => {
-      const next = !v
-      localStorage.setItem('dashboard_masked', next ? '1' : '0')
-      return next
-    })
-  }
+  const [masked] = useMasked()
 
   useEffect(() => {
     if (selectedFY === currentFY) {
@@ -98,14 +88,6 @@ export function DashboardClient({ projects, addons, partners, summaryPromise, fi
             </SelectContent>
           </Select>
           {loading && <span className="text-sm text-slate-400 animate-pulse">読み込み中...</span>}
-          <button
-            onClick={toggleMasked}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-slate-500 hover:bg-slate-200 transition-colors"
-            title={masked ? '金額を表示' : '金額を隠す'}
-          >
-            {masked ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            {masked ? '金額表示' : '金額非表示'}
-          </button>
         </div>
       </div>
 

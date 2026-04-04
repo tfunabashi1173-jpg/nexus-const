@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo } from 'react'
 import { Cost, Partner, Project, TaxType } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
+import { useMasked } from '@/lib/hooks/use-masked'
 import { AmountInput } from '@/components/ui/amount-input'
 import { findSimilarMatch, normalizeCompanyName } from '@/lib/utils/text'
 import { Card, CardContent } from '@/components/ui/card'
@@ -70,6 +71,8 @@ function TaxTypeSelect({ value, onChange, className }: { value: TaxType; onChang
 export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRate }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [masked] = useMasked()
+  const fmt = (v: number) => masked ? '¥ ****' : formatYenFull(v)
 
   // 非表示業者も含めて名前解決（既存原価が(不明)にならないよう）
   const vendorMap = Object.fromEntries(allVendors.map(v => [v.partner_id, v.name]))
@@ -1142,7 +1145,7 @@ export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRat
                             {c.tax_type && c.tax_type !== '税抜' && (
                               <Badge variant={c.tax_type === '免税' ? 'outline' : 'secondary'} className="text-xs mr-1">{c.tax_type}</Badge>
                             )}
-                            {formatYenFull(c.amount)}
+                            {fmt(c.amount)}
                           </td>
                           <td className="py-1 px-1 text-center">
                             {c.file_path && (
@@ -1193,7 +1196,7 @@ export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRat
               {/* 支払総額ヘッダー */}
               <div className="bg-blue-50 rounded p-3">
                 <p className="text-sm font-semibold text-blue-700">
-                  {selectedMonthStr} 支払総額: {formatYenFull(monthlyVendorData.reduce((s, r) => s + r.netPayment, 0))}
+                  {selectedMonthStr} 支払総額: {fmt(monthlyVendorData.reduce((s, r) => s + r.netPayment, 0))}
                 </p>
               </div>
 
@@ -1216,22 +1219,22 @@ export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRat
                       <tr key={r.vendor_id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 px-3">{r.name}</td>
                         <td className="py-2 px-3 text-center">{r.participates ? <Badge variant="secondary" className="text-xs">参加</Badge> : ''}</td>
-                        <td className="py-2 px-3 text-right tabular-nums">{formatYenFull(r.amount)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{formatYenFull(r.tax)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums">{formatYenFull(r.totalWithTax)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{r.safetyFee > 0 ? formatYenFull(r.safetyFee) : '¥0'}</td>
-                        <td className="py-2 px-3 text-right tabular-nums font-medium">{formatYenFull(r.netPayment)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{fmt(r.amount)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{masked ? '¥ ****' : formatYenFull(r.tax)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{fmt(r.totalWithTax)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{r.safetyFee > 0 ? fmt(r.safetyFee) : '¥0'}</td>
+                        <td className="py-2 px-3 text-right tabular-nums font-medium">{fmt(r.netPayment)}</td>
                       </tr>
                     ))}
                     {monthlyVendorData.length > 0 && (
                       <tr className="border-t-2 font-bold bg-slate-100">
                         <td className="py-2.5 px-3">合計</td>
                         <td></td>
-                        <td className="py-2.5 px-3 text-right tabular-nums">{formatYenFull(monthlyVendorData.reduce((s, r) => s + r.amount, 0))}</td>
-                        <td className="py-2.5 px-3 text-right tabular-nums">{formatYenFull(monthlyVendorData.reduce((s, r) => s + r.tax, 0))}</td>
-                        <td className="py-2.5 px-3 text-right tabular-nums">{formatYenFull(monthlyVendorData.reduce((s, r) => s + r.totalWithTax, 0))}</td>
-                        <td className="py-2.5 px-3 text-right tabular-nums">{formatYenFull(monthlyVendorData.reduce((s, r) => s + r.safetyFee, 0))}</td>
-                        <td className="py-2.5 px-3 text-right tabular-nums">{formatYenFull(monthlyVendorData.reduce((s, r) => s + r.netPayment, 0))}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{fmt(monthlyVendorData.reduce((s, r) => s + r.amount, 0))}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{masked ? '¥ ****' : formatYenFull(monthlyVendorData.reduce((s, r) => s + r.tax, 0))}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{fmt(monthlyVendorData.reduce((s, r) => s + r.totalWithTax, 0))}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{fmt(monthlyVendorData.reduce((s, r) => s + r.safetyFee, 0))}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{fmt(monthlyVendorData.reduce((s, r) => s + r.netPayment, 0))}</td>
                       </tr>
                     )}
                     {monthlyVendorData.length === 0 && (
@@ -1339,7 +1342,7 @@ export function CostsClient({ costs, vendors, allVendors, projects, safetyFeeRat
                           </td>
                           <td className="py-2 px-3">{c.billing_month?.slice(0, 7)}</td>
                           <td className="py-2 px-3">{normalizeCompanyName(vendorMap[c.vendor_id] ?? c.vendor_id)}</td>
-                          <td className="py-2 px-3 text-right tabular-nums">{formatYenFull(c.amount)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums">{fmt(c.amount)}</td>
                         </tr>
                       ))}
                       {filteredUnassigned.length === 0 && (

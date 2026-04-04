@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { RevenueSummary, MonthlyRevenue, Project, User } from '@/types'
 import { getFiscalYear, getFiscalYearRange, formatDateLocal, formatYenFull } from '@/lib/utils/date'
+import { useMasked } from '@/lib/hooks/use-masked'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -33,6 +34,7 @@ export function RevenueClient({
   users,
 }: Props) {
   const today = new Date()
+  const [masked] = useMasked()
   const [selectedFY, setSelectedFY] = useState(currentFY)
   const [selectedMonth, setSelectedMonth] = useState(initialMonth)
   const [summary, setSummary] = useState<RevenueSummary>(initialSummary)
@@ -152,7 +154,7 @@ export function RevenueClient({
               </div>
             </CardHeader>
             <CardContent>
-              <RevenueTable data={monthlyData} />
+              <RevenueTable data={monthlyData} masked={masked} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -174,13 +176,13 @@ export function RevenueClient({
             </CardHeader>
             <CardContent>
               <div className="flex gap-6 mb-4 text-sm">
-                <span>売上合計: <strong>{formatYenFull(totalSales)}</strong></span>
-                <span>原価合計: <strong>{formatYenFull(totalCosts)}</strong></span>
+                <span>売上合計: <strong>{masked ? '¥ ****' : formatYenFull(totalSales)}</strong></span>
+                <span>原価合計: <strong>{masked ? '¥ ****' : formatYenFull(totalCosts)}</strong></span>
                 <span className={totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                  粗利合計: <strong>{formatYenFull(totalProfit)}</strong>
+                  粗利合計: <strong>{masked ? '¥ ****' : formatYenFull(totalProfit)}</strong>
                 </span>
               </div>
-              <RevenueTable data={annualData} />
+              <RevenueTable data={annualData} masked={masked} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -235,7 +237,7 @@ export function RevenueClient({
                       <tr key={v.id} className={`border-b last:border-0 ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="py-2 pr-3 text-muted-foreground">{i + 1}</td>
                         <td className="py-2 pr-3">{v.name}</td>
-                        <td className="py-2 text-right">{formatYenFull(v.amount)}</td>
+                        <td className="py-2 text-right">{masked ? '¥ ****' : formatYenFull(v.amount)}</td>
                       </tr>
                     ))}
                     {summary.vendor_ranking.length === 0 && (
@@ -262,6 +264,7 @@ export function RevenueClient({
                 annualData={summary.annual}
                 projects={projects}
                 users={users}
+                masked={masked}
               />
             </CardContent>
           </Card>
@@ -277,11 +280,14 @@ function StaffSummaryTable({
   annualData,
   projects,
   users,
+  masked,
 }: {
   annualData: AnnualRow[]
   projects: Project[]
   users: User[]
+  masked: boolean
 }) {
+  const fmt = (v: number) => masked ? '¥ ****' : formatYenFull(v)
   // project_id → manager_id のマップ
   const managerMap = Object.fromEntries(projects.map(p => [p.project_id, p.manager_id]))
   const userMap = Object.fromEntries(users.filter(u => u.username !== '管理者').map(u => [u.user_id, u.username]))
@@ -338,9 +344,9 @@ function StaffSummaryTable({
                   {s.name}
                 </td>
                 <td className="py-2 px-3 text-right text-muted-foreground">{s.rows.length}件</td>
-                <td className="py-2 px-3 text-right">{formatYenFull(s.sales)}</td>
-                <td className="py-2 px-3 text-right">{formatYenFull(s.costs)}</td>
-                <td className={`py-2 px-3 text-right ${s.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatYenFull(s.profit)}</td>
+                <td className="py-2 px-3 text-right">{fmt(s.sales)}</td>
+                <td className="py-2 px-3 text-right">{fmt(s.costs)}</td>
+                <td className={`py-2 px-3 text-right ${s.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(s.profit)}</td>
                 <td className={`py-2 px-3 text-right ${s.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {s.sales > 0 ? `${((s.profit / s.sales) * 100).toFixed(1)}%` : '—'}
                 </td>
@@ -349,9 +355,9 @@ function StaffSummaryTable({
                 <tr key={r.project_id} className="border-b bg-blue-50/40 text-xs">
                   <td className="py-1.5 px-3 pl-8 text-muted-foreground">{r.site_name}</td>
                   <td className="py-1.5 px-3 text-right text-muted-foreground">—</td>
-                  <td className="py-1.5 px-3 text-right">{formatYenFull(r.sales)}</td>
-                  <td className="py-1.5 px-3 text-right">{formatYenFull(r.costs)}</td>
-                  <td className={`py-1.5 px-3 text-right ${r.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatYenFull(r.profit)}</td>
+                  <td className="py-1.5 px-3 text-right">{fmt(r.sales)}</td>
+                  <td className="py-1.5 px-3 text-right">{fmt(r.costs)}</td>
+                  <td className={`py-1.5 px-3 text-right ${r.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(r.profit)}</td>
                   <td className={`py-1.5 px-3 text-right ${r.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {r.sales > 0 ? `${((r.profit / r.sales) * 100).toFixed(1)}%` : '—'}
                   </td>
@@ -365,7 +371,8 @@ function StaffSummaryTable({
   )
 }
 
-function RevenueTable({ data }: { data: { project_id: string; site_name: string; sales: number; costs: number; profit: number }[] }) {
+function RevenueTable({ data, masked }: { data: { project_id: string; site_name: string; sales: number; costs: number; profit: number }[]; masked: boolean }) {
+  const fmt = (v: number) => masked ? '¥ ****' : formatYenFull(v)
   const total = data.reduce((acc, r) => ({
     sales: acc.sales + r.sales, costs: acc.costs + r.costs, profit: acc.profit + r.profit
   }), { sales: 0, costs: 0, profit: 0 })
@@ -385,10 +392,10 @@ function RevenueTable({ data }: { data: { project_id: string; site_name: string;
           {data.map((r, i) => (
             <tr key={r.project_id} className={`border-b last:border-0 hover:bg-blue-50 transition-colors ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
               <td className="py-2 pr-3">{r.site_name}</td>
-              <td className="py-2 pr-3 text-right">{formatYenFull(r.sales)}</td>
-              <td className="py-2 pr-3 text-right">{formatYenFull(r.costs)}</td>
+              <td className="py-2 pr-3 text-right">{fmt(r.sales)}</td>
+              <td className="py-2 pr-3 text-right">{fmt(r.costs)}</td>
               <td className={`py-2 text-right font-medium ${r.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatYenFull(r.profit)}
+                {fmt(r.profit)}
               </td>
             </tr>
           ))}
@@ -400,9 +407,9 @@ function RevenueTable({ data }: { data: { project_id: string; site_name: string;
           <tfoot>
             <tr className="border-t font-bold">
               <td className="py-2 pr-3">合計</td>
-              <td className="py-2 pr-3 text-right">{formatYenFull(total.sales)}</td>
-              <td className="py-2 pr-3 text-right">{formatYenFull(total.costs)}</td>
-              <td className={`py-2 text-right ${total.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatYenFull(total.profit)}</td>
+              <td className="py-2 pr-3 text-right">{fmt(total.sales)}</td>
+              <td className="py-2 pr-3 text-right">{fmt(total.costs)}</td>
+              <td className={`py-2 text-right ${total.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(total.profit)}</td>
             </tr>
           </tfoot>
         )}

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Sale, Project } from '@/types'
 import { formatYenFull } from '@/lib/utils/date'
+import { useMasked } from '@/lib/hooks/use-masked'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ interface Props {
 export function SalesClient({ sales, projects }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [masked] = useMasked()
 
   const projectMap = Object.fromEntries(projects.map(p => [p.project_id, p.site_name]))
   const depositDateMap = Object.fromEntries(projects.map(p => [p.project_id, p.scheduled_deposit_date]))
@@ -299,7 +301,7 @@ export function SalesClient({ sales, projects }: Props) {
                             </td>
                             <td className="py-2 pr-3">{projectMap[s.project_id] ?? '(不明)'}</td>
                             <td className="py-2 pr-3">{s.remarks}</td>
-                            <td className="py-2 pr-3 text-right">{formatYenFull(s.amount)}</td>
+                            <td className="py-2 pr-3 text-right">{masked ? '¥ ****' : formatYenFull(s.amount)}</td>
                             <td className="py-2">{depositDateMap[s.project_id] ?? '-'}</td>
                             <td className="py-2 pr-3 text-right" onClick={e => e.stopPropagation()}>
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setConfirmDeleteId(s.sales_id)} disabled={isPending}>
@@ -432,7 +434,7 @@ export function SalesClient({ sales, projects }: Props) {
                           <td className="py-2 px-3 whitespace-nowrap">{s.billing_date?.slice(0, 7)}</td>
                           <td className="py-2 px-3 truncate max-w-0" title={projectMap[s.project_id] ?? '(不明)'}>{projectMap[s.project_id] ?? '(不明)'}</td>
                           <td className="py-2 px-3 truncate max-w-0" title={s.remarks ?? ''}>{s.remarks}</td>
-                          <td className="py-2 px-3 text-right whitespace-nowrap">{formatYenFull(s.amount)}</td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap">{masked ? '¥ ****' : formatYenFull(s.amount)}</td>
                           <td className="py-2 px-3 whitespace-nowrap">{s.deposit_date ?? '-'}</td>
                           <td className="py-2 px-3">
                             <div className="flex justify-end gap-1">
