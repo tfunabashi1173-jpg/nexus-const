@@ -21,7 +21,10 @@ import {
   ClipboardList,
   Menu,
   X,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
+import { useMasked } from '@/lib/hooks/use-masked'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
@@ -63,6 +66,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isOpen, setIsOpen] = useState(false)
+  const [masked, toggleMasked] = useMasked()
 
   const today = new Date()
   const dateStr = format(today, 'yyyy年MM月dd日(E)', { locale: ja })
@@ -204,6 +208,15 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
       {/* フッター */}
       <div className="px-3 py-3 space-y-1">
+        <button
+          onClick={toggleMasked}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+          title={masked ? '金額を表示する' : '金額を隠す'}
+        >
+          {masked ? <Eye className="h-3.5 w-3.5 shrink-0" /> : <EyeOff className="h-3.5 w-3.5 shrink-0" />}
+          {masked ? '金額を表示' : '金額を非表示'}
+        </button>
+
         <button
           onClick={handleRefresh}
           disabled={isPending}
