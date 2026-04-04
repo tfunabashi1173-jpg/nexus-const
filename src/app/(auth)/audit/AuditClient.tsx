@@ -92,12 +92,20 @@ export function AuditClient({ logs }: Props) {
     <div className="p-6 space-y-4">
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold text-slate-900">操作履歴（監査ログ）</h1>
-        {errorCount > 0 && (
+        {errorCount > 0 && filterAction !== 'system_error' && (
           <button
             className="text-sm px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-medium hover:bg-red-200"
             onClick={() => setFilterAction('system_error')}
           >
             エラー {errorCount}件
+          </button>
+        )}
+        {filterAction !== 'all' && (
+          <button
+            className="text-sm px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-medium hover:bg-slate-200"
+            onClick={() => setFilterAction('all')}
+          >
+            ✕ 絞込解除
           </button>
         )}
       </div>
