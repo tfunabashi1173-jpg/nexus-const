@@ -111,6 +111,15 @@ UI 変更前のコミット: `fb76a3c`
 git checkout fb76a3c -- src/
 ```
 
+## セッション履歴
+
+### 2026-04-05
+- ローカルが origin/main より2コミット先行していたため `git reset --hard origin/main` で `cfe5866` に同期
+- iCloud 同期により `src/lib/utils/date.ts` が空になる問題を発見 → `git checkout HEAD` で復元
+- `/projects/[id]` の追加工事・得意先請求タブの UI 改善（v2.5.2）
+  - 登録フォームをタブ上部に移動（スクロール不要に）
+  - フォームエリアを `bg-blue-50 border border-blue-200` で視覚的に区別
+
 ## 未完了・今後の課題
 
 - [x] Supabase RPC `get_revenue_summary` の再デプロイ（`generate_series` に `::timestamp` キャストを追加した版）
