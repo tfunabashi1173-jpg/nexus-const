@@ -336,8 +336,26 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
         <TabsContent value="addons">
           <Card>
             <CardContent className="pt-4 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="font-semibold text-sm text-blue-800 mb-3">＋ 追加工事を登録</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">日付</Label>
+                    <Input type="date" value={addonDate} onChange={e => setAddonDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">内容</Label>
+                    <Input value={addonDesc} onChange={e => setAddonDesc(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">金額（税抜）</Label>
+                    <AmountInput value={addonAmount} onChange={setAddonAmount} />
+                  </div>
+                </div>
+                <Button onClick={addAddon} disabled={isPending} className="mt-3" size="sm">登録</Button>
+              </div>
               {addons.length > 0 && (
-                <table className="w-full text-sm mb-4">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium">日付</th>
@@ -356,24 +374,6 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                   </tbody>
                 </table>
               )}
-              <div className="border-t pt-4">
-                <p className="font-medium text-sm mb-3">追加工事を登録</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">日付</Label>
-                    <Input type="date" value={addonDate} onChange={e => setAddonDate(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">内容</Label>
-                    <Input value={addonDesc} onChange={e => setAddonDesc(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">金額（税抜）</Label>
-                    <AmountInput value={addonAmount} onChange={setAddonAmount} />
-                  </div>
-                </div>
-                <Button onClick={addAddon} disabled={isPending} className="mt-3" size="sm">登録</Button>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -382,8 +382,26 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
         <TabsContent value="sales">
           <Card>
             <CardContent className="pt-4 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="font-semibold text-sm text-blue-800 mb-3">＋ 請求を登録</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">請求日</Label>
+                    <Input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">名称・摘要</Label>
+                    <Input value={saleRemarks} onChange={e => setSaleRemarks(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">金額（税抜）</Label>
+                    <AmountInput value={saleAmount} onChange={setSaleAmount} onKeyDown={e => { if (e.key === 'Enter') addSale() }} />
+                  </div>
+                </div>
+                <Button onClick={addSale} disabled={isPending} className="mt-3" size="sm">登録</Button>
+              </div>
               {sales.length > 0 && (
-                <table className="w-full text-sm mb-4">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-slate-800 text-white sticky top-0 z-10">
                       <th className="text-left py-2.5 px-3 font-medium">請求日</th>
@@ -408,24 +426,6 @@ export function ProjectDetailClient({ project, costs, sales, addons, partners, u
                   </tbody>
                 </table>
               )}
-              <div className="border-t pt-4">
-                <p className="font-medium text-sm mb-3">請求を登録</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">請求日</Label>
-                    <Input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">名称・摘要</Label>
-                    <Input value={saleRemarks} onChange={e => setSaleRemarks(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">金額（税抜）</Label>
-                    <AmountInput value={saleAmount} onChange={setSaleAmount} onKeyDown={e => { if (e.key === 'Enter') addSale() }} />
-                  </div>
-                </div>
-                <Button onClick={addSale} disabled={isPending} className="mt-3" size="sm">登録</Button>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
