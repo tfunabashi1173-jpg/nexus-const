@@ -853,11 +853,9 @@ async function getDashboardSummaryImpl(s: string, e: string): Promise<DashboardS
 export function getDashboardSummary(fyStart: Date, fyEnd: Date): Promise<DashboardSummary> {
   const s = formatDateLocal(fyStart)
   const e = formatDateLocal(fyEnd)
-  return unstable_cache(
-    () => getDashboardSummaryImpl(s, e),
-    ['dashboard-summary', s, e],
-    { tags: ['dashboard'], revalidate: 60 }
-  )()
+  // PostgREST schema refresh timing can transiently return fallback zeros.
+  // Keep dashboard summaries uncached so a stale error response does not stick.
+  return getDashboardSummaryImpl(s, e)
 }
 
 // ==========================================
@@ -929,11 +927,8 @@ async function getRevenueSummaryImpl(fyStartStr: string, fyEndStr: string): Prom
 export function getRevenueSummary(fyStart: Date, fyEnd: Date): Promise<RevenueSummary> {
   const s = formatDateLocal(fyStart)
   const e = formatDateLocal(fyEnd)
-  return unstable_cache(
-    () => getRevenueSummaryImpl(s, e),
-    ['revenue-summary', s, e],
-    { tags: ['revenue'], revalidate: 300 }
-  )()
+  // Same rationale as dashboard summary: avoid persisting fallback empty data.
+  return getRevenueSummaryImpl(s, e)
 }
 
 export async function getMonthlyRevenue(month: string): Promise<MonthlyRevenue> {
