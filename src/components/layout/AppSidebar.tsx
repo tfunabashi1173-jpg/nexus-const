@@ -59,9 +59,11 @@ const adminItem = { href: '/master', label: 'マスタ管理', icon: Settings }
 
 interface AppSidebarProps {
   user: SessionUser
+  appVersion: string
+  commitSha: string
 }
 
-export function AppSidebar({ user }: AppSidebarProps) {
+export function AppSidebar({ user, appVersion, commitSha }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -247,7 +249,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           </button>
         </form>
 
-        <p className="text-xs text-center text-slate-600 pt-1">v{process.env.NEXT_PUBLIC_APP_VERSION} ({process.env.NEXT_PUBLIC_COMMIT_SHA})</p>
+        <p className="text-xs text-center text-slate-600 pt-1">{appVersion} ({commitSha})</p>
       </div>
     </aside>
     </>
