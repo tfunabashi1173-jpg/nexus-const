@@ -708,7 +708,14 @@ export async function uploadEvidence(fileBuffer: Buffer, fileName: string, conte
     .from('evidence')
     .upload(path, fileBuffer, { contentType })
 
-  if (error) return null
+  if (error) {
+    await insertSystemLog('error', 'evidence_storage_upload', error.message, {
+      path,
+      fileName,
+      contentType,
+    })
+    throw new Error(`evidence upload failed: ${error.message}`)
+  }
   return path
 }
 
@@ -718,7 +725,20 @@ export async function getEvidenceSignedUrl(filePath: string): Promise<string | n
     .storage
     .from('evidence')
     .createSignedUrl(filePath.replace(/^\//, ''), 600)
-  if (error || !data) return null
+
+  if (error) {
+    await insertSystemLog('error', 'evidence_signed_url', error.message, {
+      filePath,
+    })
+    throw new Error(`evidence signed url failed: ${error.message}`)
+  }
+
+  if (!data?.signedUrl) {
+    await insertSystemLog('error', 'evidence_signed_url', 'signed url missing in response', {
+      filePath,
+    })
+    throw new Error('evidence signed url failed: signed url missing in response')
+  }
   return data.signedUrl
 }
 

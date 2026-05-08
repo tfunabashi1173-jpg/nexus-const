@@ -40,7 +40,12 @@ export async function POST(req: NextRequest) {
         } catch {}
       }
 
-      filePath = await uploadEvidence(buffer, file.name, contentType, targetDate ?? billingMonth)
+      try {
+        filePath = await uploadEvidence(buffer, file.name, contentType, targetDate ?? billingMonth)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '証憑ファイルの保存に失敗しました'
+        return NextResponse.json({ error: message }, { status: 500 })
+      }
     }
 
     const { data, error } = await createCost({
@@ -100,7 +105,13 @@ export async function PATCH(req: NextRequest) {
         } catch {}
       }
       const targetDate = form.get('target_date') as string | null
-      const filePath = await uploadEvidence(buffer, file.name, mimeType, targetDate ?? undefined)
+      let filePath: string | null = null
+      try {
+        filePath = await uploadEvidence(buffer, file.name, mimeType, targetDate ?? undefined)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '証憑ファイルの保存に失敗しました'
+        return NextResponse.json({ error: message }, { status: 500 })
+      }
       if (filePath) updates.file_path = filePath
     }
 

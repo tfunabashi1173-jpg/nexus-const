@@ -9,7 +9,17 @@ export async function GET(req: NextRequest) {
   const path = req.nextUrl.searchParams.get('path')
   if (!path) return NextResponse.json({ error: 'path is required' }, { status: 400 })
 
-  const url = await getEvidenceSignedUrl(path)
+  let url: string | null = null
+  try {
+    url = await getEvidenceSignedUrl(path)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create signed URL'
+    const isNotFound = /not found|object.*not/i.test(message)
+    return NextResponse.json(
+      { error: isNotFound ? 'Not found' : message },
+      { status: isNotFound ? 404 : 500 },
+    )
+  }
   if (!url) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // ?json=1 の場合はURLをJSONで返す（img srcに直接使用するため）
